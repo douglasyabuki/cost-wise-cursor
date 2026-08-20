@@ -11,4 +11,18 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      "/cursor-docs": {
+        target: "https://cursor.com",
+        changeOrigin: true,
+        secure: true,
+
+        /**
+         * Removes the local proxy prefix before forwarding.
+         */
+        rewrite: (path) => path.replace(/^\/cursor-docs/, ""),
+      },
+    },
+  },
 });
