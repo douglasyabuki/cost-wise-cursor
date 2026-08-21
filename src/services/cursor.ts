@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import type { CursorModelPrice } from "@/types-and-constants/cursor-model-prices";
+import type { CursorModelPrice } from "@/types-and-constants/cursor";
 import { request } from "@/utils/api";
 import { parseCursorModelPrices } from "@/utils/cursor-model-prices";
 

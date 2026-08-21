@@ -1,4 +1,4 @@
-import type { CursorModelPrice } from "@/types-and-constants/cursor-model-prices";
+import type { CursorModelPrice } from "@/types-and-constants/cursor";
 
 import {
   findSectionEnd,
