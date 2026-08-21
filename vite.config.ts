@@ -23,6 +23,16 @@ export default defineConfig({
          */
         rewrite: (path) => path.replace(/^\/cursor-docs/, ""),
       },
+      "/deep-swe": {
+        target: "https://deepswe.datacurve.ai",
+        changeOrigin: true,
+        secure: true,
+
+        /**
+         * Removes the local proxy prefix before forwarding.
+         */
+        rewrite: (path) => path.replace(/^\/deep-swe/, ""),
+      },
     },
   },
 });
