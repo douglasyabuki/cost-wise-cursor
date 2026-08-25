@@ -1,13 +1,13 @@
 {
-    "$schema": "https://openapi.vercel.sh/vercel.json",
-    "rewrites": [
-        {
-            "source": "/cursor-docs/docs/models-and-pricing.md",
-            "destination": "https://cursor.com/docs/models-and-pricing.md"
-        },
-        {
-            "source": "/deep-swe/artifacts/v1/leaderboard-live.json",
-            "destination": "https://deepswe.datacurve.ai/artifacts/v1/leaderboard-live.json"
-        }
-    ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/deep-swe/artifacts/:version/leaderboard-live.json",
+      "destination": "https://deepswe.datacurve.ai/artifacts/:version/leaderboard-live.json"
+    },
+    {
+      "source": "/cursor-docs/docs/models-and-pricing.md",
+      "destination": "https://cursor.com/docs/models-and-pricing.md"
+    }
+  ]
 }
