@@ -1,4 +1,11 @@
 /**
+ * Supported DeepSWE benchmark versions.
+ */
+export type DeepSweVersion = "v1.1" | "v1";
+
+export type LeaderboardMetric = "cost" | "outputTokens" | "agentSteps";
+
+/**
  * Metadata for the latest leaderboard job.
  */
 export interface DeepSweLatestJob {
