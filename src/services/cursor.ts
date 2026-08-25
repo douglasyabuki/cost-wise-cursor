@@ -55,9 +55,6 @@ export const CursorService = {
       queryFn: ({ signal }) =>
         request<CursorModelPrice[]>(CURSOR_MODEL_PRICES_URL, {
           signal,
-          headers: {
-            Accept: "text/markdown, text/plain",
-          },
           parse: parseModelPricesResponse,
         }),
 

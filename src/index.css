@@ -49,6 +49,9 @@
 }
 
 :root {
+  --color-danger: #ef4444;
+  --color-success: #19ad70;
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

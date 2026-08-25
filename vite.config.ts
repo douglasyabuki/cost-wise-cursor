@@ -1,37 +1,33 @@
+import path from "node:path";
+
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import path from "path";
 import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "src"),
     },
   },
+
   server: {
     proxy: {
       "/cursor-docs": {
         target: "https://cursor.com",
         changeOrigin: true,
         secure: true,
-
-        /**
-         * Removes the local proxy prefix before forwarding.
-         */
-        rewrite: (path) => path.replace(/^\/cursor-docs/, ""),
+        rewrite: (requestPath) => requestPath.replace(/^\/cursor-docs/, ""),
       },
+
       "/deep-swe": {
         target: "https://deepswe.datacurve.ai",
         changeOrigin: true,
         secure: true,
-
-        /**
-         * Removes the local proxy prefix before forwarding.
-         */
-        rewrite: (path) => path.replace(/^\/deep-swe/, ""),
+        rewrite: (requestPath) => requestPath.replace(/^\/deep-swe/, ""),
       },
     },
   },
