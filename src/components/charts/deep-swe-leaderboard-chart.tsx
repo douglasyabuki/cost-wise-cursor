@@ -32,15 +32,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import type { CursorModelPrice } from "@/types-and-constants/cursor";
 import type {
   DeepSweLeaderboard,
   DeepSweLeaderboardRow,
   DeepSweVersion,
   LeaderboardMetric,
 } from "@/types-and-constants/deep-swe";
+import { matchLeaderboardRows } from "@/utils/cursor-model-match";
 import { formatLongDate } from "@/utils/date";
 
 interface DeepSweLeaderboardChartProps {
+  cursorModelPrices?: readonly CursorModelPrice[];
   leaderboard: DeepSweLeaderboard;
   version: DeepSweVersion;
   onVersionChange: (version: DeepSweVersion) => void;
@@ -151,9 +154,13 @@ interface ToggleFilterProps<T extends string> {
 }
 
 interface ConfigFilterProps {
+  cursorMatchedCount: number;
+  cursorMaxMatchedCount: number;
   models: ConfigModelGroup[];
   selectedConfigs: ReadonlySet<string>;
   totalCount: number;
+  onSelectCursorModels: () => void;
+  onSelectCursorModelsWithMax: () => void;
   onToggleModel: (configs: readonly string[]) => void;
   onToggleLevels: (
     configs: readonly string[],
@@ -229,6 +236,11 @@ const chartConfig = {
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 1,
+});
+
+const modelNameCollator = new Intl.Collator("en-US", {
+  numeric: true,
+  sensitivity: "base",
 });
 
 /**
@@ -996,9 +1008,13 @@ const ToggleFilter = <T extends string>({
  * @returns Configuration dropdown.
  */
 const ConfigFilter = ({
+  cursorMatchedCount,
+  cursorMaxMatchedCount,
   models,
   selectedConfigs,
   totalCount,
+  onSelectCursorModels,
+  onSelectCursorModelsWithMax,
   onToggleModel,
   onToggleLevels,
   onShowAll,
@@ -1018,6 +1034,37 @@ const ConfigFilter = ({
         <DropdownMenuLabel>Filter configurations</DropdownMenuLabel>
         <DropdownMenuItem onClick={onShowAll}>Select all</DropdownMenuItem>
         <DropdownMenuItem onClick={onHideAll}>Clear</DropdownMenuItem>
+      </DropdownMenuGroup>
+
+      <DropdownMenuSeparator />
+
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>Cursor</DropdownMenuLabel>
+
+        <div className="grid gap-2 px-2 pb-2">
+          <Button
+            aria-label={`Select ${cursorMatchedCount} Cursor models that do not require Max Mode`}
+            disabled={cursorMatchedCount === 0}
+            onClick={onSelectCursorModels}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Cursor models
+          </Button>
+
+          <Button
+            aria-label={`Select Cursor models, including ${cursorMaxMatchedCount} that require Max Mode`}
+            disabled={cursorMaxMatchedCount === 0}
+            onClick={onSelectCursorModelsWithMax}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Cursor models{" "}
+            <span className="text-muted-foreground">[legacy MAX included]</span>
+          </Button>
+        </div>
       </DropdownMenuGroup>
 
       <DropdownMenuSeparator />
@@ -1115,7 +1162,48 @@ const DeepSweLeaderboardChartContent = ({
   version,
   onMetricChange,
   onVersionChange,
+  cursorModelPrices,
 }: DeepSweLeaderboardChartContentProps): ReactElement => {
+  const matchedRows = useMemo(
+    () =>
+      matchLeaderboardRows(
+        leaderboard.rows,
+        cursorModelPrices ?? [],
+        (cursorModel) => cursorModel.model,
+      ),
+    [leaderboard.rows, cursorModelPrices],
+  );
+
+  const cursorFilterConfigs = useMemo(() => {
+    const cursorConfigs = new Set<string>();
+    const cursorMaxIncludedConfigs = new Set<string>();
+    const cursorModels = new Set<string>();
+    const cursorMaxModels = new Set<string>();
+
+    matchedRows.forEach((row) => {
+      if (row.cursorMatch === null) {
+        return;
+      }
+
+      cursorMaxIncludedConfigs.add(row.config);
+
+      if (row.cursorMatch.cursorModel.requiresLegacyMaxMode) {
+        cursorMaxModels.add(row.model);
+        return;
+      }
+
+      cursorConfigs.add(row.config);
+      cursorModels.add(row.model);
+    });
+
+    return {
+      cursorConfigs,
+      cursorMatchedCount: cursorModels.size,
+      cursorMaxIncludedConfigs,
+      cursorMaxMatchedCount: cursorMaxModels.size,
+    };
+  }, [matchedRows]);
+
   const [excludedConfigs, setExcludedConfigs] = useState<Set<string>>(
     () => new Set(),
   );
@@ -1142,21 +1230,24 @@ const DeepSweLeaderboardChartContent = ({
   const selectedConfigs = useMemo(
     () =>
       new Set(
-        leaderboard.rows
+        matchedRows
           .filter((row) => !excludedConfigs.has(row.config))
           .map((row) => row.config),
       ),
-    [leaderboard.rows, excludedConfigs],
+    [matchedRows, excludedConfigs],
   );
 
   const configModels = useMemo(
-    () => groupRowsByModel(leaderboard.rows),
-    [leaderboard.rows],
+    () =>
+      [...groupRowsByModel(matchedRows)].sort((first, second) =>
+        modelNameCollator.compare(first.model, second.model),
+      ),
+    [matchedRows],
   );
 
   const visibleRows = useMemo(
-    () => leaderboard.rows.filter((row) => selectedConfigs.has(row.config)),
-    [leaderboard.rows, selectedConfigs],
+    () => matchedRows.filter((row) => selectedConfigs.has(row.config)),
+    [matchedRows, selectedConfigs],
   );
 
   const series = useMemo(
@@ -1271,7 +1362,7 @@ const DeepSweLeaderboardChartContent = ({
     setExcludedConfigs((current) => {
       const next = new Set(current);
 
-      leaderboard.rows.forEach((row) => {
+      matchedRows.forEach((row) => {
         next.delete(row.config);
       });
 
@@ -1288,12 +1379,43 @@ const DeepSweLeaderboardChartContent = ({
     setExcludedConfigs((current) => {
       const next = new Set(current);
 
-      leaderboard.rows.forEach((row) => {
+      matchedRows.forEach((row) => {
         next.add(row.config);
       });
 
       return next;
     });
+  };
+
+  /**
+   * Replaces the current configuration selection with an exact set.
+   *
+   * @param configs - Configuration identifiers to keep visible.
+   */
+  const handleSelectConfigs = (configs: ReadonlySet<string>): void => {
+    setHoveredConfig(null);
+    setPinnedConfig(null);
+    setExcludedConfigs(
+      new Set(
+        matchedRows
+          .filter((row) => !configs.has(row.config))
+          .map((row) => row.config),
+      ),
+    );
+  };
+
+  /**
+   * Selects matched Cursor models that do not require Max Mode.
+   */
+  const handleSelectCursorModels = (): void => {
+    handleSelectConfigs(cursorFilterConfigs.cursorConfigs);
+  };
+
+  /**
+   * Selects every matched Cursor model, including Max Mode models.
+   */
+  const handleSelectCursorModelsWithMax = (): void => {
+    handleSelectConfigs(cursorFilterConfigs.cursorMaxIncludedConfigs);
   };
 
   /**
@@ -1395,13 +1517,17 @@ const DeepSweLeaderboardChartContent = ({
           ) : null}
 
           <ConfigFilter
+            cursorMatchedCount={cursorFilterConfigs.cursorMatchedCount}
+            cursorMaxMatchedCount={cursorFilterConfigs.cursorMaxMatchedCount}
             onHideAll={handleHideAll}
+            onSelectCursorModels={handleSelectCursorModels}
+            onSelectCursorModelsWithMax={handleSelectCursorModelsWithMax}
             onToggleLevels={handleLevelsToggle}
             onToggleModel={handleModelToggle}
             onShowAll={handleShowAll}
             models={configModels}
             selectedConfigs={selectedConfigs}
-            totalCount={leaderboard.rows.length}
+            totalCount={matchedRows.length}
           />
         </div>
       </div>
@@ -1594,12 +1720,14 @@ export const DeepSweLeaderboardChart = ({
   leaderboard,
   version,
   onVersionChange,
+  cursorModelPrices,
 }: DeepSweLeaderboardChartProps): ReactElement => {
   const [metric, setMetric] = useState<LeaderboardMetric>("cost");
 
   return (
     <DeepSweLeaderboardChartContent
       key={version}
+      cursorModelPrices={cursorModelPrices}
       leaderboard={leaderboard}
       metric={metric}
       onMetricChange={setMetric}

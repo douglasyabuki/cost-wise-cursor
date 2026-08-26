@@ -101,7 +101,6 @@ export const HomePage = () => {
   const [version, setVersion] = useState<DeepSweVersion>("v1.1");
 
   const deepSweQuery = useQuery(DeepSweService.getLeaderboard(version));
-
   const cursorQuery = useQuery(CursorService.getModelPrices());
 
   return (
@@ -168,6 +167,7 @@ export const HomePage = () => {
 
       {deepSweQuery.isSuccess && (
         <DeepSweLeaderboardChart
+          cursorModelPrices={cursorQuery.data}
           leaderboard={deepSweQuery.data}
           onVersionChange={setVersion}
           version={version}

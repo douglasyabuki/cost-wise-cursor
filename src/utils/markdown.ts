@@ -9,7 +9,7 @@
  * @returns The exclusive line index at which the section ends.
  */
 export const findSectionEnd = (
-  lines: string[],
+  lines: readonly string[],
   sectionStart: number,
 ): number => {
   for (let index = sectionStart + 1; index < lines.length; index++) {
@@ -34,7 +34,7 @@ export const findSectionEnd = (
  * @returns The table-header line index, or `-1` when no table is found.
  */
 export const findTableStart = (
-  lines: string[],
+  lines: readonly string[],
   start: number,
   end: number,
 ): number => {
