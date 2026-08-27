@@ -1,7 +1,6 @@
 # Cost Wise Cursor
 
-This application helps Cursor users compare AI
-models by coding performance and cost efficiency.
+This application helps Cursor users compare AI models by coding performance and cost efficiency.
 
 The app combines DeepSWE benchmark results with Cursor's model catalog and
 pricing documentation. This makes it easier to answer questions such as:
@@ -88,16 +87,12 @@ filters.
 
 ## Filters and visualizations
 
-### Efficiency chart
+### Shared filters
 
-The main chart plots DeepSWE score against one of these metrics:
-
-- Average cost per task
-- Average output tokens
-- Average agent steps
-
-Configurations belonging to the same model are connected. Hovering or pinning a
-configuration highlights its model family and exposes its exact axis values.
+The benchmark version and configuration filters are shared by both
+visualizations. Changing the selected `v1` or `v1.1` dataset, model, or
+reasoning-effort level updates both the efficiency chart and performance
+ranking.
 
 The configuration menu supports individual models and reasoning-effort levels,
 plus these Cursor-specific presets:
@@ -107,12 +102,35 @@ plus these Cursor-specific presets:
 - **Cursor models [MAX included]** — all matched Cursor models, including models
   marked as requiring legacy Max Mode.
 
-These filters reflect the notes parsed from Cursor's documentation. They do not
+These filters reflect notes parsed from Cursor's documentation. They do not
 inspect your Cursor account, plan, or local settings.
 
-### Ranking dashboard
+### Efficiency chart
 
-<!-- Under development -->
+The efficiency chart plots DeepSWE score against one of these metrics:
+
+- Average cost per task
+- Average output tokens
+- Average agent steps
+
+Configurations belonging to the same model are connected. Hovering or pinning
+a configuration highlights its model family and shows its exact axis values.
+Changing the benchmark version resets chart focus while preserving the selected
+efficiency metric.
+
+### Performance ranking
+
+The performance ranking uses the same filtered configurations and benchmark
+version as the efficiency chart. It provides two views:
+
+- **Best** — shows the highest available reasoning-effort configuration for
+  each selected model. Pass@1 breaks ties at the same effort level.
+- **All effort levels** — shows every selected configuration.
+
+Rows are ordered by Pass@1 and include confidence intervals, average benchmark
+cost, average output tokens, and average agent steps. The ranking has no
+separate model or benchmark-version filter, which keeps both visualizations in
+sync.
 
 ## Tech stack
 
@@ -176,9 +194,13 @@ development and production.
   versions.
 - Model matching is conservative. A newly renamed model can remain unmatched
   until its normalization or alias is updated.
+- DeepSWE performance and cost are measured with its benchmark harness, not
+  Cursor's agent implementation.
 - DeepSWE average task cost describes benchmark runs. Actual Cursor usage varies
   with prompt size, cached tokens, generated output, tools, reasoning effort,
   context length, plan rules, and pricing changes.
+- Cursor's per-token prices are reference metadata and should not be interpreted
+  as the cost DeepSWE observed during its benchmark runs.
 - Max Mode labels are informational. Always check the current Cursor docs and
   your account settings before assuming a model or mode is available.
 
@@ -187,13 +209,14 @@ control identifies it and allows a separate retry.
 
 ## Project goal
 
-Cost Wise Cursor does not try to declare one model universally best. Its goal is to
-make the trade-offs visible so you can filter Cursor-compatible models and pick
-the level of performance, cost, and agent usage that fits your work.
+Cost Wise Cursor does not try to declare one model universally best. Its goal
+is to make the trade-offs visible so you can filter Cursor-compatible models
+and pick the level of performance, cost, and agent usage that fits your work.
 
 ## Attribution
 
 All benchmark results and methodology belong to
 [Datacurve/DeepSWE](https://deepswe.datacurve.ai/). Model availability, pricing,
-and plan details belong to [Cursor](https://cursor.com/docs/models-and-pricing).
-Model names and trademarks belong to their respective owners.
+and plan details belong to
+[Cursor](https://cursor.com/docs/models-and-pricing). Model names and trademarks
+belong to their respective owners.

@@ -1,8 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
-import { DeepSweLeaderboardChart } from "@/components/charts/deep-swe-leaderboard-chart";
-import { DeepSweLeaderboardRanking } from "@/components/charts/deep-swe-leaderboard-ranking";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -26,6 +24,9 @@ import {
   type MatchedLeaderboardRow,
   matchLeaderboardRows,
 } from "@/utils/cursor-model-match";
+
+import { DeepSweEfficiencyChart } from "./deep-swe-efficiency-chart";
+import { DeepSwePerformanceRanking } from "./deep-swe-performance-ranking";
 
 export interface DeepSweLeaderboardDashboardProps {
   cursorModelPrices?: readonly CursorModelPrice[];
@@ -216,7 +217,7 @@ const ToggleFilter = <T extends string>({
         onChange(nextValue as T);
       }
     }}
-    size="sm"
+    size="default"
     spacing={0}
     value={[value]}
     variant="outline"
@@ -542,13 +543,13 @@ export const DeepSweLeaderboardDashboard = ({
         </div>
       </div>
 
-      <DeepSweLeaderboardChart
+      <DeepSweEfficiencyChart
         leaderboard={leaderboard}
         rows={selectedRows}
         version={version}
       />
 
-      <DeepSweLeaderboardRanking rows={selectedRows} version={version} />
+      <DeepSwePerformanceRanking rows={selectedRows} />
     </div>
   );
 };

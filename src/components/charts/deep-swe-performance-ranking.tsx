@@ -3,22 +3,18 @@ import { type ReactElement, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type {
-  DeepSweLeaderboardRow,
-  DeepSweVersion,
-} from "@/types-and-constants/deep-swe";
+import type { DeepSweLeaderboardRow } from "@/types-and-constants/deep-swe";
 
 type RankingMode = "best" | "all";
 
-export interface DeepSweLeaderboardRankingProps {
+export interface DeepSwePerformanceRankingProps {
   rows: readonly DeepSweLeaderboardRow[];
-  version: DeepSweVersion;
   onConfigSelect?: (config: string | null) => void;
 }
 
 interface ModelGroup {
   model: string;
-  rows: DeepSweLeaderboardRow[];
+  rows: readonly DeepSweLeaderboardRow[];
   bestRow: DeepSweLeaderboardRow;
 }
 
@@ -44,6 +40,11 @@ interface RankingRowProps {
 interface ConfidenceBounds {
   lower: number;
   upper: number;
+}
+
+interface ScoreAxisProps {
+  maximum: number;
+  ticks: readonly number[];
 }
 
 const RANKING_MODE_OPTIONS = [
@@ -111,9 +112,9 @@ const getReasoningEffortRank = (effort: string): number =>
 /**
  * Chooses the highest available reasoning-effort configuration for a model.
  *
- * Score is used only as a tie breaker between rows at the same effort level.
- * This mirrors DeepSWE's "Best" view, which means highest effort rather than
- * highest measured Pass@1.
+ * Pass@1 breaks ties between configurations at the same effort level. In this
+ * component, "Best" means highest available effort, not highest measured
+ * Pass@1.
  *
  * @param rows - Configurations belonging to one model.
  * @returns Highest-effort configuration.
@@ -138,10 +139,11 @@ const getBestEffortRow = (
   });
 
 /**
- * Groups leaderboard rows by model and orders models by their best row score.
+ * Groups leaderboard rows by model and orders the groups by the Pass@1 score
+ * of each model's highest-effort configuration.
  *
- * @param rows - Leaderboard configurations.
- * @returns Ordered model groups.
+ * @param rows - Filtered leaderboard configurations.
+ * @returns Score-ordered model groups.
  */
 const groupRowsByModel = (
   rows: readonly DeepSweLeaderboardRow[],
@@ -298,8 +300,8 @@ const formatConfidence = (row: DeepSweLeaderboardRow): string =>
 /**
  * Calculates a readable score-axis maximum.
  *
- * The axis starts at 80% for typical DeepSWE scores, grows in 20-point
- * increments when necessary, and never exceeds 100%.
+ * The maximum is at least 80%, grows in 20-point increments when necessary,
+ * and never exceeds 100%.
  *
  * @param rows - Rows currently shown in the ranking.
  * @returns Percentage-axis maximum.
@@ -542,13 +544,7 @@ const RankingRow = ({
  * @param props - Axis maximum and tick values.
  * @returns Desktop score axis.
  */
-const ScoreAxis = ({
-  maximum,
-  ticks,
-}: {
-  maximum: number;
-  ticks: readonly number[];
-}): ReactElement => (
+const ScoreAxis = ({ maximum, ticks }: ScoreAxisProps): ReactElement => (
   <div className="hidden grid-cols-[minmax(180px,1fr)_minmax(260px,2fr)_5rem_5rem_4rem] items-start gap-4 px-3 pt-2 pb-1 sm:grid">
     <div />
 
@@ -581,15 +577,19 @@ const ScoreAxis = ({
 );
 
 /**
- * Renders the stateful ranking dashboard content for one benchmark version.
+ * Renders the DeepSWE performance ranking.
  *
- * @param props - Ranking dashboard properties.
- * @returns Filterable leaderboard ranking.
+ * The parent dashboard supplies filtered rows and remounts this component when
+ * the benchmark version changes, resetting its local ranking mode and selected
+ * configuration.
+ *
+ * @param props - Filtered rows and optional selection callback.
+ * @returns Interactive performance ranking.
  */
-const DeepSweLeaderboardRankingContent = ({
+export const DeepSwePerformanceRanking = ({
   rows,
   onConfigSelect,
-}: DeepSweLeaderboardRankingProps): ReactElement => {
+}: DeepSwePerformanceRankingProps): ReactElement => {
   const modelGroups = useMemo(() => groupRowsByModel(rows), [rows]);
 
   const [rankingMode, setRankingMode] = useState<RankingMode>("best");
@@ -688,18 +688,3 @@ const DeepSweLeaderboardRankingContent = ({
     </section>
   );
 };
-
-/**
- * Renders the DeepSWE model-ranking dashboard.
- *
- * The version key resets model and row selections when the benchmark changes,
- * preventing stale configuration identifiers from leaking across datasets.
- *
- * @param props - Ranking dashboard properties.
- * @returns Responsive DeepSWE ranking dashboard.
- */
-export const DeepSweLeaderboardRanking = (
-  props: DeepSweLeaderboardRankingProps,
-): ReactElement => (
-  <DeepSweLeaderboardRankingContent key={props.version} {...props} />
-);

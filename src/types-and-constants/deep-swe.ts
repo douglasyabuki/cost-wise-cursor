@@ -3,7 +3,7 @@
  */
 export type DeepSweVersion = "v1.1" | "v1";
 
-export type LeaderboardMetric = "cost" | "outputTokens" | "agentSteps";
+export type EfficiencyMetric = "cost" | "outputTokens" | "agentSteps";
 
 /**
  * Metadata for the latest leaderboard job.

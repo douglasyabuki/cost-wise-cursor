@@ -25,21 +25,22 @@ import type {
   DeepSweLeaderboard,
   DeepSweLeaderboardRow,
   DeepSweVersion,
-  LeaderboardMetric,
+  EfficiencyMetric,
 } from "@/types-and-constants/deep-swe";
 import { formatLongDate } from "@/utils/date";
 
-interface DeepSweLeaderboardChartProps {
+interface DeepSweEfficiencyChartProps {
   leaderboard: DeepSweLeaderboard;
   rows: readonly DeepSweLeaderboardRow[];
   version: DeepSweVersion;
 }
 
-interface DeepSweLeaderboardChartContentProps {
-  leaderboard: DeepSweLeaderboard;
-  metric: LeaderboardMetric;
-  rows: readonly DeepSweLeaderboardRow[];
-  onMetricChange: (metric: LeaderboardMetric) => void;
+interface DeepSweEfficiencyChartContentProps extends Omit<
+  DeepSweEfficiencyChartProps,
+  "version"
+> {
+  metric: EfficiencyMetric;
+  onMetricChange: (metric: EfficiencyMetric) => void;
 }
 
 interface ChartPoint {
@@ -85,7 +86,7 @@ interface EfficiencyDotProps extends ScatterShapeProps {
   activeConfig: string | null;
   activeModel: string | null;
   color: string;
-  metric: LeaderboardMetric;
+  metric: EfficiencyMetric;
   pinnedConfig: string | null;
   onHover: (config: string) => void;
   onLeave: () => void;
@@ -140,7 +141,7 @@ const METRIC_OPTIONS = [
   { label: "Cost", value: "cost" },
   { label: "Output tokens", value: "outputTokens" },
   { label: "Agent steps", value: "agentSteps" },
-] as const satisfies readonly ToggleFilterOption<LeaderboardMetric>[];
+] as const satisfies readonly ToggleFilterOption<EfficiencyMetric>[];
 
 const REASONING_EFFORT_ORDER = [
   "none",
@@ -153,7 +154,11 @@ const REASONING_EFFORT_ORDER = [
   "default",
 ] as const;
 
-const PREFERRED_LABEL_EFFORTS: Readonly<Record<string, string>> = {
+type KnownReasoningEffort = (typeof REASONING_EFFORT_ORDER)[number];
+
+const PREFERRED_LABEL_EFFORTS: Readonly<
+  Partial<Record<string, KnownReasoningEffort>>
+> = {
   "gpt-5-6-sol": "medium",
   "gpt-5-6-terra": "medium",
   "gpt-5-6-luna": "medium",
@@ -208,7 +213,7 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
  */
 const getMetricValue = (
   row: DeepSweLeaderboardRow,
-  metric: LeaderboardMetric,
+  metric: EfficiencyMetric,
 ): number | null => {
   switch (metric) {
     case "cost":
@@ -228,7 +233,7 @@ const getMetricValue = (
  * @param metric - Selected efficiency metric.
  * @returns Human-readable axis label.
  */
-const getMetricAxisLabel = (metric: LeaderboardMetric): string => {
+const getMetricAxisLabel = (metric: EfficiencyMetric): string => {
   switch (metric) {
     case "cost":
       return "Average cost per task";
@@ -248,7 +253,7 @@ const getMetricAxisLabel = (metric: LeaderboardMetric): string => {
  * @param value - Numeric metric value.
  * @returns Compact axis value.
  */
-const formatMetricTick = (metric: LeaderboardMetric, value: number): string => {
+const formatMetricTick = (metric: EfficiencyMetric, value: number): string => {
   switch (metric) {
     case "cost":
       return `$${Number.isInteger(value) ? value : value.toFixed(1)}`;
@@ -268,10 +273,7 @@ const formatMetricTick = (metric: LeaderboardMetric, value: number): string => {
  * @param value - Numeric metric value.
  * @returns Detailed metric value.
  */
-const formatMetricValue = (
-  metric: LeaderboardMetric,
-  value: number,
-): string => {
+const formatMetricValue = (metric: EfficiencyMetric, value: number): string => {
   switch (metric) {
     case "cost":
       return `$${value.toFixed(2)}`;
@@ -392,7 +394,7 @@ const normalizeModelIdentifier = (model: string): string =>
  */
 const getReasoningEffortOrder = (effort: string): number => {
   const index = REASONING_EFFORT_ORDER.indexOf(
-    effort.toLowerCase() as (typeof REASONING_EFFORT_ORDER)[number],
+    effort.toLowerCase() as KnownReasoningEffort,
   );
 
   return index === -1 ? REASONING_EFFORT_ORDER.length : index;
@@ -410,7 +412,7 @@ const getReasoningEffortOrder = (effort: string): number => {
  */
 const createChartSeries = (
   rows: readonly DeepSweLeaderboardRow[],
-  metric: LeaderboardMetric,
+  metric: EfficiencyMetric,
 ): ChartSeries[] => {
   const groupedPoints = new Map<string, ChartPoint[]>();
 
@@ -484,7 +486,7 @@ const createChartSeries = (
  * @param series - Visible chart series.
  * @returns Rounded percentage maximum.
  */
-const getScoreMaximum = (series: ChartSeries[]): number => {
+const getScoreMaximum = (series: readonly ChartSeries[]): number => {
   const highestScore = Math.max(
     0,
     ...series.flatMap((item) => item.points.map((point) => point.score)),
@@ -544,7 +546,7 @@ const getNiceTickStep = (maximum: number, targetTickCount: number): number => {
  * @param series - Visible chart series.
  * @returns Reversed X-axis maximum and ticks.
  */
-const getMetricAxis = (series: ChartSeries[]): MetricAxis => {
+const getMetricAxis = (series: readonly ChartSeries[]): MetricAxis => {
   const highestMetricValue = Math.max(
     0,
     ...series.flatMap((item) => item.points.map((point) => point.metricValue)),
@@ -569,7 +571,7 @@ const getMetricAxis = (series: ChartSeries[]): MetricAxis => {
  * @returns Matching point or null.
  */
 const findChartPoint = (
-  series: ChartSeries[],
+  series: readonly ChartSeries[],
   config: string | null,
 ): ChartPoint | null => {
   if (config === null) {
@@ -916,17 +918,17 @@ const ToggleFilter = <T extends string>({
 );
 
 /**
- * Renders the stateful DeepSWE efficiency leaderboard content.
+ * Renders the stateful DeepSWE efficiency-chart content.
  *
- * @param props - Leaderboard chart properties and selected metric.
- * @returns Filterable connected scatter chart.
+ * @param props - Filtered rows, metric state, and leaderboard metadata.
+ * @returns Interactive connected scatter chart.
  */
-const DeepSweLeaderboardChartContent = ({
+const DeepSweEfficiencyChartContent = ({
   leaderboard,
   metric,
   rows,
   onMetricChange,
-}: DeepSweLeaderboardChartContentProps): ReactElement => {
+}: DeepSweEfficiencyChartContentProps): ReactElement => {
   const [hoveredConfig, setHoveredConfig] = useState<string | null>(null);
   const [pinnedConfig, setPinnedConfig] = useState<string | null>(null);
 
@@ -1002,12 +1004,12 @@ const DeepSweLeaderboardChartContent = ({
   };
 
   /**
-   * Changes the horizontal-axis metric and clears selections that are no
-   * longer represented by the new metric.
+   * Changes the horizontal-axis metric and clears hover or pin state that the
+   * new metric cannot represent.
    *
    * @param nextMetric - Metric to display.
    */
-  const handleMetricChange = (nextMetric: LeaderboardMetric): void => {
+  const handleMetricChange = (nextMetric: EfficiencyMetric): void => {
     const nextSeries = createChartSeries(rows, nextMetric);
 
     if (
@@ -1245,24 +1247,24 @@ const DeepSweLeaderboardChartContent = ({
 };
 
 /**
- * Renders the DeepSWE efficiency leaderboard.
+ * Renders the DeepSWE efficiency chart.
  *
- * The stateful chart content is keyed by benchmark version so version changes
- * reset chart focus without resetting the selected metric. Configuration
- * filtering is owned by the parent dashboard.
+ * The stateful content is keyed by benchmark version so version changes reset
+ * chart focus without resetting the selected metric. The parent dashboard owns
+ * configuration filtering.
  *
- * @param props - Leaderboard chart properties.
- * @returns Filterable connected scatter chart.
+ * @param props - Filtered leaderboard rows, metadata, and benchmark version.
+ * @returns Interactive connected scatter chart.
  */
-export const DeepSweLeaderboardChart = ({
+export const DeepSweEfficiencyChart = ({
   leaderboard,
   rows,
   version,
-}: DeepSweLeaderboardChartProps): ReactElement => {
-  const [metric, setMetric] = useState<LeaderboardMetric>("cost");
+}: DeepSweEfficiencyChartProps): ReactElement => {
+  const [metric, setMetric] = useState<EfficiencyMetric>("cost");
 
   return (
-    <DeepSweLeaderboardChartContent
+    <DeepSweEfficiencyChartContent
       key={version}
       leaderboard={leaderboard}
       metric={metric}
