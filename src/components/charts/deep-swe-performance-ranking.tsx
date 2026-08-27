@@ -545,13 +545,13 @@ const RankingRow = ({
     <Button
       aria-label={`${row.model}, ${effort} effort, Pass at 1 ${score}, average cost ${cost}, cost efficiency ${costEfficiency}`}
       aria-pressed={isSelected}
-      className="hover:bg-muted/50 aria-pressed:bg-accent/70 h-auto w-full justify-start rounded-none px-2 py-3 text-left whitespace-normal shadow-none sm:px-3"
+      className="hover:bg-muted/50 aria-pressed:bg-accent/70 h-auto w-full justify-start rounded-none px-2 py-3 text-left whitespace-normal shadow-none lg:px-3"
       onClick={() => onSelect(row.config)}
       title={`${row.model} · ${effort} · ${score} ${confidence}`}
       type="button"
       variant="ghost"
     >
-      <div className="w-full min-w-0 sm:hidden">
+      <div className="w-full min-w-0 lg:hidden">
         <div className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
@@ -606,7 +606,7 @@ const RankingRow = ({
         </dl>
       </div>
 
-      <div className="hidden w-full min-w-0 grid-cols-[minmax(170px,1fr)_minmax(240px,2fr)_5rem_6rem_5rem_4rem] items-center gap-4 sm:grid">
+      <div className="hidden w-full min-w-0 grid-cols-[minmax(170px,1fr)_minmax(240px,2fr)_5rem_6rem_5rem_4rem] items-center gap-4 lg:grid">
         <div className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
@@ -653,7 +653,7 @@ const RankingRow = ({
  * @returns Desktop score axis.
  */
 const ScoreAxis = ({ maximum, ticks }: ScoreAxisProps): ReactElement => (
-  <div className="hidden grid-cols-[minmax(170px,1fr)_minmax(240px,2fr)_5rem_6rem_5rem_4rem] items-start gap-4 px-3 pt-2 pb-1 sm:grid">
+  <div className="hidden grid-cols-[minmax(170px,1fr)_minmax(240px,2fr)_5rem_6rem_5rem_4rem] items-start gap-4 px-3 pt-2 pb-1 lg:grid">
     <div />
 
     <div className="grid min-w-0 grid-cols-[minmax(120px,1fr)_4.75rem] gap-3">
@@ -789,8 +789,8 @@ export const DeepSwePerformanceRanking = ({
         </div>
       </div>
 
-      <div className="border-border bg-card rounded-md border px-3 py-2 sm:px-4 sm:py-3">
-        <div className="text-muted-foreground hidden grid-cols-[minmax(170px,1fr)_minmax(240px,2fr)_5rem_6rem_5rem_4rem] gap-4 border-b px-3 pb-2 text-xs font-medium sm:grid">
+      <div className="border-border bg-card rounded-md border px-3 py-2 lg:px-4 lg:py-3">
+        <div className="text-muted-foreground hidden grid-cols-[minmax(170px,1fr)_minmax(240px,2fr)_5rem_6rem_5rem_4rem] gap-4 border-b px-3 pb-2 text-xs font-medium lg:grid">
           <span>Model</span>
           <span>Pass@1</span>
           <span className="text-right">Avg cost</span>
