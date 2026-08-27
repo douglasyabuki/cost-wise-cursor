@@ -1255,7 +1255,7 @@ const DeepSweLeaderboardChartContent = ({
     [visibleRows, metric],
   );
 
-  const lastJobDate = formatLongDate(leaderboard.latest_job?.finished_at);
+  const lastJobDate = formatLongDate(leaderboard.generated_at);
   const scoreMaximum = getScoreMaximum(series);
   const scoreTicks = createScoreTicks(scoreMaximum);
   const metricAxis = getMetricAxis(series);
@@ -1504,10 +1504,12 @@ const DeepSweLeaderboardChartContent = ({
           value={metric}
         />
 
-        <span className="hidden flex-1 items-center justify-end gap-1 text-sm md:flex">
-          <span className="hidden lg:block">Last job executed on</span>
-          {lastJobDate}
-        </span>
+        {lastJobDate && (
+          <span className="hidden flex-1 items-center justify-end gap-1 text-sm md:flex">
+            <span className="hidden lg:block">Last job executed on</span>
+            {lastJobDate}
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           {pinnedPoint ? (
