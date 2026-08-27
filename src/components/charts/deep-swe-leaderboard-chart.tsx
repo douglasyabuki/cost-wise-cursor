@@ -1,4 +1,3 @@
-import { ChevronDown } from "lucide-react";
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -21,36 +20,25 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { CursorModelPrice } from "@/types-and-constants/cursor";
 import type {
   DeepSweLeaderboard,
   DeepSweLeaderboardRow,
   DeepSweVersion,
   LeaderboardMetric,
 } from "@/types-and-constants/deep-swe";
-import { matchLeaderboardRows } from "@/utils/cursor-model-match";
 import { formatLongDate } from "@/utils/date";
 
 interface DeepSweLeaderboardChartProps {
-  cursorModelPrices?: readonly CursorModelPrice[];
   leaderboard: DeepSweLeaderboard;
+  rows: readonly DeepSweLeaderboardRow[];
   version: DeepSweVersion;
-  onVersionChange: (version: DeepSweVersion) => void;
 }
 
-interface DeepSweLeaderboardChartContentProps extends DeepSweLeaderboardChartProps {
+interface DeepSweLeaderboardChartContentProps {
+  leaderboard: DeepSweLeaderboard;
   metric: LeaderboardMetric;
+  rows: readonly DeepSweLeaderboardRow[];
   onMetricChange: (metric: LeaderboardMetric) => void;
 }
 
@@ -136,11 +124,6 @@ interface EfficiencyLabelProps extends LabelContentProps {
   onPin: (config: string) => void;
 }
 
-interface ConfigModelGroup {
-  model: string;
-  rows: DeepSweLeaderboardRow[];
-}
-
 interface ToggleFilterOption<T extends string> {
   label: string;
   value: T;
@@ -152,28 +135,6 @@ interface ToggleFilterProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
 }
-
-interface ConfigFilterProps {
-  cursorMatchedCount: number;
-  cursorMaxMatchedCount: number;
-  models: ConfigModelGroup[];
-  selectedConfigs: ReadonlySet<string>;
-  totalCount: number;
-  onSelectCursorModels: () => void;
-  onSelectCursorModelsWithMax: () => void;
-  onToggleModel: (configs: readonly string[]) => void;
-  onToggleLevels: (
-    configs: readonly string[],
-    selectedConfigs: ReadonlySet<string>,
-  ) => void;
-  onShowAll: () => void;
-  onHideAll: () => void;
-}
-
-const VERSION_OPTIONS = [
-  { label: "v1.1", value: "v1.1" },
-  { label: "v1", value: "v1" },
-] as const satisfies readonly ToggleFilterOption<DeepSweVersion>[];
 
 const METRIC_OPTIONS = [
   { label: "Cost", value: "cost" },
@@ -236,11 +197,6 @@ const chartConfig = {
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 1,
-});
-
-const modelNameCollator = new Intl.Collator("en-US", {
-  numeric: true,
-  sensitivity: "base",
 });
 
 /**
@@ -443,48 +399,6 @@ const getReasoningEffortOrder = (effort: string): number => {
 };
 
 /**
- * Groups leaderboard configurations by model and orders their levels.
- *
- * @param rows - Available leaderboard configurations.
- * @returns Model groups with their reasoning levels.
- */
-const groupRowsByModel = (
-  rows: DeepSweLeaderboardRow[],
-): ConfigModelGroup[] => {
-  const groupedRows = new Map<string, DeepSweLeaderboardRow[]>();
-
-  rows.forEach((row) => {
-    const modelRows = groupedRows.get(row.model) ?? [];
-
-    modelRows.push(row);
-    groupedRows.set(row.model, modelRows);
-  });
-
-  return [...groupedRows.entries()]
-    .map(([model, modelRows]) => ({
-      model,
-      rows: [...modelRows].sort((first, second) => {
-        const firstEffort = getReasoningEffort(first);
-        const secondEffort = getReasoningEffort(second);
-        const firstOrder = getReasoningEffortOrder(firstEffort);
-        const secondOrder = getReasoningEffortOrder(secondEffort);
-
-        if (firstOrder !== secondOrder) {
-          return firstOrder - secondOrder;
-        }
-
-        return firstEffort.localeCompare(secondEffort);
-      }),
-    }))
-    .sort((first, second) => {
-      const firstScore = Math.max(...first.rows.map((row) => row.pass_at_1));
-      const secondScore = Math.max(...second.rows.map((row) => row.pass_at_1));
-
-      return secondScore - firstScore;
-    });
-};
-
-/**
  * Converts leaderboard rows into model chart series.
  *
  * Each series connects the different reasoning-effort configurations
@@ -495,7 +409,7 @@ const groupRowsByModel = (
  * @returns Chart series grouped by model.
  */
 const createChartSeries = (
-  rows: DeepSweLeaderboardRow[],
+  rows: readonly DeepSweLeaderboardRow[],
   metric: LeaderboardMetric,
 ): ChartSeries[] => {
   const groupedPoints = new Map<string, ChartPoint[]>();
@@ -516,7 +430,7 @@ const createChartSeries = (
     points.push({
       config: row.config,
       model: row.model,
-      effort: row.reasoning_effort ?? "default",
+      effort: getReasoningEffort(row),
       isLabelAnchor: false,
       label: "",
       score: row.pass_at_1 * 100,
@@ -1002,155 +916,6 @@ const ToggleFilter = <T extends string>({
 );
 
 /**
- * Renders the configuration selector.
- *
- * @param props - Configuration filter properties.
- * @returns Configuration dropdown.
- */
-const ConfigFilter = ({
-  cursorMatchedCount,
-  cursorMaxMatchedCount,
-  models,
-  selectedConfigs,
-  totalCount,
-  onSelectCursorModels,
-  onSelectCursorModelsWithMax,
-  onToggleModel,
-  onToggleLevels,
-  onShowAll,
-  onHideAll,
-}: ConfigFilterProps): ReactElement => (
-  <DropdownMenu>
-    <DropdownMenuTrigger render={<Button variant="outline" />}>
-      Configs{" "}
-      <span className="text-muted-foreground">
-        ({selectedConfigs.size}/{totalCount})
-      </span>
-      <ChevronDown aria-hidden data-icon="inline-end" />
-    </DropdownMenuTrigger>
-
-    <DropdownMenuContent align="end" className="w-80">
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>Filter configurations</DropdownMenuLabel>
-        <DropdownMenuItem onClick={onShowAll}>Select all</DropdownMenuItem>
-        <DropdownMenuItem onClick={onHideAll}>Clear</DropdownMenuItem>
-      </DropdownMenuGroup>
-
-      <DropdownMenuSeparator />
-
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>Cursor</DropdownMenuLabel>
-
-        <div className="grid gap-2 px-2 pb-2">
-          <Button
-            aria-label={`Select ${cursorMatchedCount} Cursor models that do not require Max Mode`}
-            disabled={cursorMatchedCount === 0}
-            onClick={onSelectCursorModels}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Cursor models
-          </Button>
-
-          <Button
-            aria-label={`Select Cursor models, including ${cursorMaxMatchedCount} that require Max Mode`}
-            disabled={cursorMaxMatchedCount === 0}
-            onClick={onSelectCursorModelsWithMax}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Cursor models{" "}
-            <span className="text-muted-foreground">[legacy MAX included]</span>
-          </Button>
-        </div>
-      </DropdownMenuGroup>
-
-      <DropdownMenuSeparator />
-
-      <DropdownMenuGroup className="flex max-h-80 flex-col gap-1 overflow-y-auto">
-        <DropdownMenuLabel>Models</DropdownMenuLabel>
-        {models.map((modelGroup) => {
-          const configIds = modelGroup.rows.map((row) => row.config);
-          const selectedLevelIds = configIds.filter((config) =>
-            selectedConfigs.has(config),
-          );
-          const selectedLevelCount = selectedLevelIds.length;
-          const totalLevelCount = modelGroup.rows.length;
-
-          return (
-            <DropdownMenuItem
-              closeOnClick={false}
-              className="focus:text-foreground focus:**:text-foreground data-highlighted:text-foreground data-highlighted:**:text-foreground flex-col items-stretch gap-2 p-2 focus:bg-transparent data-highlighted:bg-transparent"
-              key={modelGroup.model}
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <Checkbox
-                  aria-label={`Select all ${modelGroup.model} levels`}
-                  checked={selectedLevelCount === totalLevelCount}
-                  indeterminate={
-                    selectedLevelCount > 0 &&
-                    selectedLevelCount < totalLevelCount
-                  }
-                  onCheckedChange={() => onToggleModel(configIds)}
-                />
-
-                <span className="min-w-0 flex-1 truncate font-medium">
-                  {modelGroup.model}
-                </span>
-
-                <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                  {selectedLevelCount}/{totalLevelCount}
-                </span>
-              </div>
-
-              <ToggleGroup
-                aria-label={`${modelGroup.model} reasoning levels`}
-                className="ml-6 max-w-full flex-wrap"
-                onValueChange={(values) =>
-                  onToggleLevels(configIds, new Set(values))
-                }
-                size="sm"
-                spacing={0}
-                value={selectedLevelIds}
-                multiple
-                variant="outline"
-              >
-                {modelGroup.rows.map((row) => {
-                  const effort = getReasoningEffort(row);
-
-                  return (
-                    <ToggleGroupItem
-                      aria-label={`${modelGroup.model} ${effort} reasoning level`}
-                      key={row.config}
-                      pressed={selectedLevelIds.includes(row.config)}
-                      size="sm"
-                      title={[
-                        effort.toUpperCase(),
-                        row.mean_cost_usd === null
-                          ? null
-                          : formatMetricValue("cost", row.mean_cost_usd),
-                        `${(row.pass_at_1 * 100).toFixed(0)}%`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                      value={row.config}
-                    >
-                      {effort}
-                    </ToggleGroupItem>
-                  );
-                })}
-              </ToggleGroup>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>
-);
-
-/**
  * Renders the stateful DeepSWE efficiency leaderboard content.
  *
  * @param props - Leaderboard chart properties and selected metric.
@@ -1159,54 +924,9 @@ const ConfigFilter = ({
 const DeepSweLeaderboardChartContent = ({
   leaderboard,
   metric,
-  version,
+  rows,
   onMetricChange,
-  onVersionChange,
-  cursorModelPrices,
 }: DeepSweLeaderboardChartContentProps): ReactElement => {
-  const matchedRows = useMemo(
-    () =>
-      matchLeaderboardRows(
-        leaderboard.rows,
-        cursorModelPrices ?? [],
-        (cursorModel) => cursorModel.model,
-      ),
-    [leaderboard.rows, cursorModelPrices],
-  );
-
-  const cursorFilterConfigs = useMemo(() => {
-    const cursorConfigs = new Set<string>();
-    const cursorMaxIncludedConfigs = new Set<string>();
-    const cursorModels = new Set<string>();
-    const cursorMaxModels = new Set<string>();
-
-    matchedRows.forEach((row) => {
-      if (row.cursorMatch === null) {
-        return;
-      }
-
-      cursorMaxIncludedConfigs.add(row.config);
-
-      if (row.cursorMatch.cursorModel.requiresLegacyMaxMode) {
-        cursorMaxModels.add(row.model);
-        return;
-      }
-
-      cursorConfigs.add(row.config);
-      cursorModels.add(row.model);
-    });
-
-    return {
-      cursorConfigs,
-      cursorMatchedCount: cursorModels.size,
-      cursorMaxIncludedConfigs,
-      cursorMaxMatchedCount: cursorMaxModels.size,
-    };
-  }, [matchedRows]);
-
-  const [excludedConfigs, setExcludedConfigs] = useState<Set<string>>(
-    () => new Set(),
-  );
   const [hoveredConfig, setHoveredConfig] = useState<string | null>(null);
   const [pinnedConfig, setPinnedConfig] = useState<string | null>(null);
 
@@ -1227,40 +947,17 @@ const DeepSweLeaderboardChartContent = ({
     return undefined;
   }, [pinnedConfig]);
 
-  const selectedConfigs = useMemo(
-    () =>
-      new Set(
-        matchedRows
-          .filter((row) => !excludedConfigs.has(row.config))
-          .map((row) => row.config),
-      ),
-    [matchedRows, excludedConfigs],
-  );
+  const series = useMemo(() => createChartSeries(rows, metric), [metric, rows]);
 
-  const configModels = useMemo(
-    () =>
-      [...groupRowsByModel(matchedRows)].sort((first, second) =>
-        modelNameCollator.compare(first.model, second.model),
-      ),
-    [matchedRows],
+  const lastJobDate = formatLongDate(
+    leaderboard.latest_job?.finished_at ?? leaderboard.generated_at,
   );
-
-  const visibleRows = useMemo(
-    () => matchedRows.filter((row) => selectedConfigs.has(row.config)),
-    [matchedRows, selectedConfigs],
-  );
-
-  const series = useMemo(
-    () => createChartSeries(visibleRows, metric),
-    [visibleRows, metric],
-  );
-
-  const lastJobDate = formatLongDate(leaderboard.generated_at);
   const scoreMaximum = getScoreMaximum(series);
   const scoreTicks = createScoreTicks(scoreMaximum);
   const metricAxis = getMetricAxis(series);
   const hoveredPoint = findChartPoint(series, hoveredConfig);
   const pinnedPoint = findChartPoint(series, pinnedConfig);
+  const visiblePinnedConfig = pinnedPoint?.config ?? null;
   const activePoint = pinnedPoint
     ? hoveredPoint?.model === pinnedPoint.model
       ? hoveredPoint
@@ -1277,146 +974,6 @@ const DeepSweLeaderboardChartContent = ({
           Number(second.model === activeModel),
       )
     : series;
-
-  /**
-   * Selects or hides every level belonging to a model.
-   *
-   * @param configs - Configuration identifiers belonging to the model.
-   */
-  const handleModelToggle = (configs: readonly string[]): void => {
-    const shouldShowAll = configs.some(
-      (config) => !selectedConfigs.has(config),
-    );
-    const nextSelectedConfigs = new Set(selectedConfigs);
-
-    configs.forEach((config) => {
-      if (shouldShowAll) {
-        nextSelectedConfigs.add(config);
-      } else {
-        nextSelectedConfigs.delete(config);
-      }
-    });
-
-    if (pinnedConfig !== null && !nextSelectedConfigs.has(pinnedConfig)) {
-      setPinnedConfig(null);
-    }
-
-    setExcludedConfigs((current) => {
-      const next = new Set(current);
-
-      configs.forEach((config) => {
-        if (shouldShowAll) {
-          next.delete(config);
-        } else {
-          next.add(config);
-        }
-      });
-
-      return next;
-    });
-  };
-
-  /**
-   * Applies a model's selected reasoning levels.
-   *
-   * @param configs - Configuration identifiers belonging to the model.
-   * @param nextSelectedConfigs - Configuration identifiers selected in the group.
-   */
-  const handleLevelsToggle = (
-    configs: readonly string[],
-    nextSelectedConfigs: ReadonlySet<string>,
-  ): void => {
-    const nextVisibleConfigs = new Set(selectedConfigs);
-
-    configs.forEach((config) => {
-      if (nextSelectedConfigs.has(config)) {
-        nextVisibleConfigs.add(config);
-      } else {
-        nextVisibleConfigs.delete(config);
-      }
-    });
-
-    if (pinnedConfig !== null && !nextVisibleConfigs.has(pinnedConfig)) {
-      setPinnedConfig(null);
-    }
-
-    setExcludedConfigs((current) => {
-      const next = new Set(current);
-
-      configs.forEach((config) => {
-        if (nextSelectedConfigs.has(config)) {
-          next.delete(config);
-        } else {
-          next.add(config);
-        }
-      });
-
-      return next;
-    });
-  };
-
-  /**
-   * Selects every currently available configuration.
-   */
-  const handleShowAll = (): void => {
-    setExcludedConfigs((current) => {
-      const next = new Set(current);
-
-      matchedRows.forEach((row) => {
-        next.delete(row.config);
-      });
-
-      return next;
-    });
-  };
-
-  /**
-   * Hides every currently available configuration.
-   */
-  const handleHideAll = (): void => {
-    setPinnedConfig(null);
-
-    setExcludedConfigs((current) => {
-      const next = new Set(current);
-
-      matchedRows.forEach((row) => {
-        next.add(row.config);
-      });
-
-      return next;
-    });
-  };
-
-  /**
-   * Replaces the current configuration selection with an exact set.
-   *
-   * @param configs - Configuration identifiers to keep visible.
-   */
-  const handleSelectConfigs = (configs: ReadonlySet<string>): void => {
-    setHoveredConfig(null);
-    setPinnedConfig(null);
-    setExcludedConfigs(
-      new Set(
-        matchedRows
-          .filter((row) => !configs.has(row.config))
-          .map((row) => row.config),
-      ),
-    );
-  };
-
-  /**
-   * Selects matched Cursor models that do not require Max Mode.
-   */
-  const handleSelectCursorModels = (): void => {
-    handleSelectConfigs(cursorFilterConfigs.cursorConfigs);
-  };
-
-  /**
-   * Selects every matched Cursor model, including Max Mode models.
-   */
-  const handleSelectCursorModelsWithMax = (): void => {
-    handleSelectConfigs(cursorFilterConfigs.cursorMaxIncludedConfigs);
-  };
 
   /**
    * Focuses an exact chart configuration.
@@ -1451,7 +1008,7 @@ const DeepSweLeaderboardChartContent = ({
    * @param nextMetric - Metric to display.
    */
   const handleMetricChange = (nextMetric: LeaderboardMetric): void => {
-    const nextSeries = createChartSeries(visibleRows, nextMetric);
+    const nextSeries = createChartSeries(rows, nextMetric);
 
     if (
       pinnedConfig !== null &&
@@ -1491,13 +1048,6 @@ const DeepSweLeaderboardChartContent = ({
     <section className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <ToggleFilter
-          label="Benchmark version"
-          onChange={onVersionChange}
-          options={VERSION_OPTIONS}
-          value={version}
-        />
-
-        <ToggleFilter
           label="Efficiency metric"
           onChange={handleMetricChange}
           options={METRIC_OPTIONS}
@@ -1511,26 +1061,12 @@ const DeepSweLeaderboardChartContent = ({
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto">
           {pinnedPoint ? (
             <Button onClick={handleClearPin} size="sm" variant="ghost">
               Clear pinned
             </Button>
           ) : null}
-
-          <ConfigFilter
-            cursorMatchedCount={cursorFilterConfigs.cursorMatchedCount}
-            cursorMaxMatchedCount={cursorFilterConfigs.cursorMaxMatchedCount}
-            onHideAll={handleHideAll}
-            onSelectCursorModels={handleSelectCursorModels}
-            onSelectCursorModelsWithMax={handleSelectCursorModelsWithMax}
-            onToggleLevels={handleLevelsToggle}
-            onToggleModel={handleModelToggle}
-            onShowAll={handleShowAll}
-            models={configModels}
-            selectedConfigs={selectedConfigs}
-            totalCount={matchedRows.length}
-          />
         </div>
       </div>
 
@@ -1664,7 +1200,7 @@ const DeepSweLeaderboardChartContent = ({
                       onHover={handlePointHover}
                       onLeave={handlePointLeave}
                       onPin={handlePointPin}
-                      pinnedConfig={pinnedConfig}
+                      pinnedConfig={visiblePinnedConfig}
                     />
                   )}
                 >
@@ -1712,29 +1248,26 @@ const DeepSweLeaderboardChartContent = ({
  * Renders the DeepSWE efficiency leaderboard.
  *
  * The stateful chart content is keyed by benchmark version so version changes
- * reset filters and chart selections without synchronously updating state in
- * an effect. The selected metric remains preserved across versions.
+ * reset chart focus without resetting the selected metric. Configuration
+ * filtering is owned by the parent dashboard.
  *
  * @param props - Leaderboard chart properties.
  * @returns Filterable connected scatter chart.
  */
 export const DeepSweLeaderboardChart = ({
   leaderboard,
+  rows,
   version,
-  onVersionChange,
-  cursorModelPrices,
 }: DeepSweLeaderboardChartProps): ReactElement => {
   const [metric, setMetric] = useState<LeaderboardMetric>("cost");
 
   return (
     <DeepSweLeaderboardChartContent
       key={version}
-      cursorModelPrices={cursorModelPrices}
       leaderboard={leaderboard}
       metric={metric}
       onMetricChange={setMetric}
-      onVersionChange={onVersionChange}
-      version={version}
+      rows={rows}
     />
   );
 };

@@ -2,8 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CircleCheck, CircleXIcon, RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 
-import { DeepSweLeaderboardChart } from "@/components/charts/deep-swe-leaderboard-chart";
-import { DeepSweLeaderboardRanking } from "@/components/charts/deep-swe-leaderboard-ranking";
+import { DeepSweLeaderboardDashboard } from "@/components/charts/deep-swe-leaderboard-dashboard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -167,20 +166,12 @@ export const HomePage = () => {
       )}
 
       {deepSweQuery.isSuccess && (
-        <div className="space-y-6">
-          <DeepSweLeaderboardChart
-            cursorModelPrices={cursorQuery.data}
-            leaderboard={deepSweQuery.data}
-            onVersionChange={setVersion}
-            version={version}
-          />
-
-          <DeepSweLeaderboardRanking
-            leaderboard={deepSweQuery.data}
-            onVersionChange={setVersion}
-            version={version}
-          />
-        </div>
+        <DeepSweLeaderboardDashboard
+          cursorModelPrices={cursorQuery.data}
+          leaderboard={deepSweQuery.data}
+          onVersionChange={setVersion}
+          version={version}
+        />
       )}
     </div>
   );

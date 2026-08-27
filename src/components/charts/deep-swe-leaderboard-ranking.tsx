@@ -1,21 +1,9 @@
-import { ChevronDown } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type {
-  DeepSweLeaderboard,
   DeepSweLeaderboardRow,
   DeepSweVersion,
 } from "@/types-and-constants/deep-swe";
@@ -23,10 +11,8 @@ import type {
 type RankingMode = "best" | "all";
 
 export interface DeepSweLeaderboardRankingProps {
-  leaderboard: DeepSweLeaderboard;
+  rows: readonly DeepSweLeaderboardRow[];
   version: DeepSweVersion;
-  onVersionChange: (version: DeepSweVersion) => void;
-  initialSelectedModels?: readonly string[];
   onConfigSelect?: (config: string | null) => void;
 }
 
@@ -48,14 +34,6 @@ interface ToggleFilterProps<T extends string> {
   onChange: (value: T) => void;
 }
 
-interface ModelFilterProps {
-  models: readonly string[];
-  selectedModels: ReadonlySet<string>;
-  onClear: () => void;
-  onSelectAll: () => void;
-  onToggleModel: (model: string) => void;
-}
-
 interface RankingRowProps {
   axisMaximum: number;
   isSelected: boolean;
@@ -67,11 +45,6 @@ interface ConfidenceBounds {
   lower: number;
   upper: number;
 }
-
-const VERSION_OPTIONS = [
-  { label: "v1.1", value: "v1.1" },
-  { label: "v1", value: "v1" },
-] as const satisfies readonly ToggleFilterOption<DeepSweVersion>[];
 
 const RANKING_MODE_OPTIONS = [
   { label: "Best", value: "best" },
@@ -413,83 +386,6 @@ const ToggleFilter = <T extends string>({
 );
 
 /**
- * Renders the model-selection dropdown.
- *
- * @param props - Model filter properties.
- * @returns Search-free checkbox model picker.
- */
-const ModelFilter = ({
-  models,
-  selectedModels,
-  onClear,
-  onSelectAll,
-  onToggleModel,
-}: ModelFilterProps): ReactElement => (
-  <DropdownMenu>
-    <DropdownMenuTrigger render={<Button variant="outline" />}>
-      Models{" "}
-      <span className="text-muted-foreground tabular-nums">
-        ({selectedModels.size}/{models.length})
-      </span>
-      <ChevronDown aria-hidden data-icon="inline-end" />
-    </DropdownMenuTrigger>
-
-    <DropdownMenuContent align="end" className="w-72">
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>Filter models</DropdownMenuLabel>
-
-        <div className="grid grid-cols-2 gap-2 px-2 pb-2">
-          <Button
-            disabled={selectedModels.size === models.length}
-            onClick={onSelectAll}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Select all
-          </Button>
-
-          <Button
-            disabled={selectedModels.size === 0}
-            onClick={onClear}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Clear
-          </Button>
-        </div>
-      </DropdownMenuGroup>
-
-      <DropdownMenuSeparator />
-
-      <DropdownMenuGroup className="max-h-80 overflow-y-auto">
-        {models.map((model) => {
-          const isSelected = selectedModels.has(model);
-
-          return (
-            <DropdownMenuItem
-              closeOnClick={false}
-              key={model}
-              onClick={() => onToggleModel(model)}
-            >
-              <Checkbox
-                aria-hidden="true"
-                checked={isSelected}
-                className="pointer-events-none"
-                tabIndex={-1}
-              />
-
-              <span className="min-w-0 flex-1 truncate">{model}</span>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>
-);
-
-/**
  * Renders a score bar with its confidence-interval whisker.
  *
  * @param props - Score visualization properties.
@@ -691,73 +587,34 @@ const ScoreAxis = ({
  * @returns Filterable leaderboard ranking.
  */
 const DeepSweLeaderboardRankingContent = ({
-  leaderboard,
-  version,
-  initialSelectedModels,
+  rows,
   onConfigSelect,
-  onVersionChange,
 }: DeepSweLeaderboardRankingProps): ReactElement => {
-  const modelGroups = useMemo(
-    () => groupRowsByModel(leaderboard.rows),
-    [leaderboard.rows],
-  );
-
-  const modelNames = useMemo(
-    () =>
-      modelGroups
-        .map((group) => group.model)
-        .sort((first, second) => modelNameCollator.compare(first, second)),
-    [modelGroups],
-  );
+  const modelGroups = useMemo(() => groupRowsByModel(rows), [rows]);
 
   const [rankingMode, setRankingMode] = useState<RankingMode>("best");
   const [selectedConfig, setSelectedConfig] = useState<string | null>(null);
-  const [excludedModels, setExcludedModels] = useState<Set<string>>(() => {
-    const availableModels = new Set(modelNames);
-    const initialModels = initialSelectedModels ?? modelNames;
-    const initialModelSet = new Set(
-      initialModels.filter((model) => availableModels.has(model)),
-    );
-
-    return new Set(modelNames.filter((model) => !initialModelSet.has(model)));
-  });
-
-  const selectedModels = useMemo(
-    () => new Set(modelNames.filter((model) => !excludedModels.has(model))),
-    [excludedModels, modelNames],
-  );
 
   const visibleRows = useMemo(() => {
-    const rows = modelGroups.flatMap((group) => {
-      if (!selectedModels.has(group.model)) {
-        return [];
-      }
+    const rankedRows = modelGroups.flatMap((group) =>
+      rankingMode === "best" ? [group.bestRow] : group.rows,
+    );
 
-      return rankingMode === "best" ? [group.bestRow] : group.rows;
-    });
-
-    return rows.sort(
+    return rankedRows.sort(
       (first, second) =>
         second.pass_at_1 - first.pass_at_1 ||
         modelNameCollator.compare(first.model, second.model) ||
         getReasoningEffortRank(getReasoningEffort(second)) -
           getReasoningEffortRank(getReasoningEffort(first)),
     );
-  }, [modelGroups, rankingMode, selectedModels]);
+  }, [modelGroups, rankingMode]);
 
+  const activeSelectedConfig =
+    selectedConfig !== null && rows.some((row) => row.config === selectedConfig)
+      ? selectedConfig
+      : null;
   const scoreAxisMaximum = getScoreAxisMaximum(visibleRows);
   const scoreTicks = createScoreTicks(scoreAxisMaximum);
-
-  /**
-   * Changes the benchmark version and clears the selected configuration.
-   *
-   * @param nextVersion - Benchmark version to request.
-   */
-  const handleVersionChange = (nextVersion: DeepSweVersion): void => {
-    setSelectedConfig(null);
-    onConfigSelect?.(null);
-    onVersionChange(nextVersion);
-  };
 
   /**
    * Changes the ranking detail and clears a potentially hidden selection.
@@ -771,69 +628,12 @@ const DeepSweLeaderboardRankingContent = ({
   };
 
   /**
-   * Toggles a model in the current filter.
-   *
-   * @param model - Model identifier to toggle.
-   */
-  const handleToggleModel = (model: string): void => {
-    const selectedRow =
-      selectedConfig === null
-        ? undefined
-        : leaderboard.rows.find((row) => row.config === selectedConfig);
-
-    if (selectedModels.has(model) && selectedRow?.model === model) {
-      setSelectedConfig(null);
-      onConfigSelect?.(null);
-    }
-
-    setExcludedModels((current) => {
-      const next = new Set(current);
-
-      if (next.has(model)) {
-        next.delete(model);
-      } else {
-        next.add(model);
-      }
-
-      return next;
-    });
-  };
-
-  /**
-   * Selects every available model.
-   */
-  const handleSelectAllModels = (): void => {
-    setExcludedModels((current) => {
-      const next = new Set(current);
-
-      modelNames.forEach((model) => next.delete(model));
-
-      return next;
-    });
-  };
-
-  /**
-   * Clears the current model filter and row selection.
-   */
-  const handleClearModels = (): void => {
-    setExcludedModels((current) => {
-      const next = new Set(current);
-
-      modelNames.forEach((model) => next.add(model));
-
-      return next;
-    });
-    setSelectedConfig(null);
-    onConfigSelect?.(null);
-  };
-
-  /**
    * Toggles the selected leaderboard configuration.
    *
    * @param config - Configuration identifier.
    */
   const handleConfigSelect = (config: string): void => {
-    const nextConfig = selectedConfig === config ? null : config;
+    const nextConfig = activeSelectedConfig === config ? null : config;
 
     setSelectedConfig(nextConfig);
     onConfigSelect?.(nextConfig);
@@ -847,28 +647,11 @@ const DeepSweLeaderboardRankingContent = ({
 
       <div className="flex flex-wrap items-center gap-3">
         <ToggleFilter
-          label="Benchmark version"
-          onChange={handleVersionChange}
-          options={VERSION_OPTIONS}
-          value={version}
-        />
-
-        <ToggleFilter
           label="Ranking detail"
           onChange={handleRankingModeChange}
           options={RANKING_MODE_OPTIONS}
           value={rankingMode}
         />
-
-        <div className="ml-auto">
-          <ModelFilter
-            models={modelNames}
-            onClear={handleClearModels}
-            onSelectAll={handleSelectAllModels}
-            onToggleModel={handleToggleModel}
-            selectedModels={selectedModels}
-          />
-        </div>
       </div>
 
       <div className="border-border bg-card rounded-md border px-3 py-2 sm:px-4 sm:py-3">
@@ -882,23 +665,14 @@ const DeepSweLeaderboardRankingContent = ({
 
         {visibleRows.length === 0 ? (
           <div className="text-muted-foreground flex min-h-36 flex-col items-center justify-center gap-3 px-4 text-center text-sm">
-            <p>No models are selected.</p>
-
-            <Button
-              onClick={handleSelectAllModels}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Select all models
-            </Button>
+            <p>No configurations are selected.</p>
           </div>
         ) : (
           <div className="divide-border divide-y">
             {visibleRows.map((row) => (
               <RankingRow
                 axisMaximum={scoreAxisMaximum}
-                isSelected={selectedConfig === row.config}
+                isSelected={activeSelectedConfig === row.config}
                 key={row.config}
                 onSelect={handleConfigSelect}
                 row={row}
