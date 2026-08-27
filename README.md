@@ -121,16 +121,42 @@ efficiency metric.
 ### Performance ranking
 
 The performance ranking uses the same filtered configurations and benchmark
-version as the efficiency chart. It provides two views:
+version as the efficiency chart.
+
+The configuration-detail control provides two views:
 
 - **Best** — shows the highest available reasoning-effort configuration for
   each selected model. Pass@1 breaks ties at the same effort level.
 - **All effort levels** — shows every selected configuration.
 
-Rows are ordered by Pass@1 and include confidence intervals, average benchmark
-cost, average output tokens, and average agent steps. The ranking has no
+The ranking-metric control determines how those configurations are ordered:
+
+- **Performance** — orders configurations by Pass@1.
+- **Cost efficiency** — orders configurations by Pass@1 percentage points per
+  DeepSWE benchmark dollar.
+
+Cost efficiency is calculated as:
+
+```text
+(Pass@1 × 100) ÷ average DeepSWE task cost
+```
+
+For example, a configuration with 80% Pass@1 and an average benchmark cost of
+$2 scores 40 Pass@1 points per dollar. Configurations without usable cost data
+appear last when this ranking is selected.
+
+Each row shows Pass@1, its confidence interval, average benchmark cost, cost
+efficiency, average output tokens, and average agent steps. The ranking has no
 separate model or benchmark-version filter, which keeps both visualizations in
 sync.
+
+The cost-efficiency score uses DeepSWE's observed benchmark cost. It is not an
+estimate of the cost of running the model in Cursor.
+
+```md
+- The cost-efficiency ranking is based on DeepSWE's observed average task cost.
+  It does not use Cursor's current per-token prices or predict Cursor billing.
+```
 
 ## Tech stack
 
