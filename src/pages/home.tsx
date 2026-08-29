@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CircleCheck, CircleXIcon, RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 
-import { DeepSweLeaderboardDashboard } from "@/components/charts/deep-swe-leaderboard-dashboard";
+import { DeepSweLeaderboardDashboard } from "@/components/dashboard/deep-swe-leaderboard-dashboard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";

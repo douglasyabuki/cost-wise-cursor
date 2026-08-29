@@ -5,7 +5,7 @@ import type {
   DeepSweVersion,
 } from "@/types-and-constants/deep-swe";
 import { request } from "@/utils/api";
-import { parseDeepSweLeaderboard } from "@/utils/deep-swe-datacurve";
+import { parseDeepSweLeaderboard } from "@/utils/deep-swe";
 
 const DEFAULT_DEEP_SWE_VERSION: DeepSweVersion = "v1";
 

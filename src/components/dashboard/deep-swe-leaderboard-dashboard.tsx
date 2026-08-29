@@ -25,8 +25,8 @@ import {
   matchLeaderboardRows,
 } from "@/utils/cursor-model-match";
 
-import { DeepSweEfficiencyChart } from "./deep-swe-efficiency-chart";
-import { DeepSwePerformanceRanking } from "./deep-swe-performance-ranking";
+import { DeepSweEfficiencyChart } from "./charts/deep-swe-efficiency-chart";
+import { DeepSwePerformanceRankingChart } from "./charts/deep-swe-performance-ranking-chart";
 
 export interface DeepSweLeaderboardDashboardProps {
   cursorModelPrices?: readonly CursorModelPrice[];
@@ -549,7 +549,7 @@ export const DeepSweLeaderboardDashboard = ({
         version={version}
       />
 
-      <DeepSwePerformanceRanking rows={selectedRows} />
+      <DeepSwePerformanceRankingChart rows={selectedRows} />
     </div>
   );
 };

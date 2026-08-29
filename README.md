@@ -118,9 +118,9 @@ a configuration highlights its model family and shows its exact axis values.
 Changing the benchmark version resets chart focus while preserving the selected
 efficiency metric.
 
-### Performance ranking
+### Performance ranking chart
 
-The performance ranking uses the same filtered configurations and benchmark
+The performance ranking chart uses the same filtered configurations and benchmark
 version as the efficiency chart.
 
 The configuration-detail control provides two views:

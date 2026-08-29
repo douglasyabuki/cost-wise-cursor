@@ -8,7 +8,7 @@ import type { DeepSweLeaderboardRow } from "@/types-and-constants/deep-swe";
 type RankingMode = "best" | "all";
 type RankingMetric = "performance" | "costEfficiency";
 
-export interface DeepSwePerformanceRankingProps {
+export interface DeepSwePerformanceRankingChartProps {
   rows: readonly DeepSweLeaderboardRow[];
   onConfigSelect?: (config: string | null) => void;
 }
@@ -688,19 +688,19 @@ const ScoreAxis = ({ maximum, ticks }: ScoreAxisProps): ReactElement => (
 );
 
 /**
- * Renders the DeepSWE performance ranking.
+ * Renders the DeepSWE performance ranking chart.
  *
  * The parent dashboard supplies filtered rows and can remount this component
  * when the benchmark version changes, resetting its local ranking mode and
  * selected configuration.
  *
  * @param props - Filtered rows and optional selection callback.
- * @returns Interactive performance ranking.
+ * @returns Interactive performance ranking chart.
  */
-export const DeepSwePerformanceRanking = ({
+export const DeepSwePerformanceRankingChart = ({
   rows,
   onConfigSelect,
-}: DeepSwePerformanceRankingProps): ReactElement => {
+}: DeepSwePerformanceRankingChartProps): ReactElement => {
   const modelGroups = useMemo(() => groupRowsByModel(rows), [rows]);
 
   const [rankingMode, setRankingMode] = useState<RankingMode>("best");
