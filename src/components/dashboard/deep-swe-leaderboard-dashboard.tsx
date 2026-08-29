@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, SearchIcon, X } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { CursorModelPrice } from "@/types-and-constants/cursor";
@@ -214,141 +220,196 @@ const ConfigFilter = ({
   onToggleLevels,
   onShowAll,
   onHideAll,
-}: ConfigFilterProps): ReactElement => (
-  <DropdownMenu>
-    <DropdownMenuTrigger render={<Button variant="outline" />}>
-      Configs{" "}
-      <span className="text-muted-foreground tabular-nums">
-        ({selectedConfigs.size}/{totalCount})
-      </span>
-      <ChevronDown aria-hidden data-icon="inline-end" />
-    </DropdownMenuTrigger>
+}: ConfigFilterProps): ReactElement => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const visibleModels = useMemo(
+    () =>
+      normalizedSearchQuery.length === 0
+        ? models
+        : models.filter((modelGroup) =>
+            modelGroup.model.toLowerCase().includes(normalizedSearchQuery),
+          ),
+    [models, normalizedSearchQuery],
+  );
 
-    <DropdownMenuContent align="end" className="w-80">
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>Filter configurations</DropdownMenuLabel>
-        <DropdownMenuItem onClick={onShowAll}>Select all</DropdownMenuItem>
-        <DropdownMenuItem onClick={onHideAll}>Clear</DropdownMenuItem>
-      </DropdownMenuGroup>
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="outline" />}>
+        Configs{" "}
+        <span className="text-muted-foreground tabular-nums">
+          ({selectedConfigs.size}/{totalCount})
+        </span>
+        <ChevronDown aria-hidden data-icon="inline-end" />
+      </DropdownMenuTrigger>
 
-      <DropdownMenuSeparator />
+      <DropdownMenuContent align="end" className="w-80">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Filter configurations</DropdownMenuLabel>
+          <DropdownMenuItem onClick={onShowAll}>Select all</DropdownMenuItem>
+          <DropdownMenuItem onClick={onHideAll}>Clear</DropdownMenuItem>
+        </DropdownMenuGroup>
 
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>Cursor availability</DropdownMenuLabel>
+        <DropdownMenuSeparator />
 
-        <div className="grid gap-2 px-2 pb-2">
-          <Button
-            aria-label={`Select ${cursorMatchedCount} Cursor models that do not require legacy Max Mode`}
-            disabled={cursorMatchedCount === 0}
-            onClick={onSelectCursorModels}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Cursor models
-          </Button>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Cursor availability</DropdownMenuLabel>
 
-          <Button
-            aria-label={`Select Cursor models, including ${cursorMaxMatchedCount} that require legacy Max Mode`}
-            disabled={cursorMaxMatchedCount === 0}
-            onClick={onSelectCursorModelsWithMax}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Cursor models{" "}
-            <span className="text-muted-foreground">[MAX included]</span>
-          </Button>
-        </div>
-      </DropdownMenuGroup>
-
-      <DropdownMenuSeparator />
-
-      <DropdownMenuGroup className="flex max-h-80 flex-col gap-1 overflow-y-auto">
-        <DropdownMenuLabel>Models</DropdownMenuLabel>
-
-        {models.map((modelGroup) => {
-          const configIds = modelGroup.rows.map((row) => row.config);
-          const selectedLevelIds = configIds.filter((config) =>
-            selectedConfigs.has(config),
-          );
-          const selectedLevelCount = selectedLevelIds.length;
-          const totalLevelCount = modelGroup.rows.length;
-
-          return (
-            <DropdownMenuItem
-              closeOnClick={false}
-              className="focus:text-foreground focus:**:text-foreground data-highlighted:text-foreground data-highlighted:**:text-foreground flex-col items-stretch gap-2 p-2 focus:bg-transparent data-highlighted:bg-transparent"
-              key={modelGroup.model}
+          <div className="grid gap-2 px-2 pb-2">
+            <Button
+              aria-label={`Select ${cursorMatchedCount} Cursor models that do not require legacy Max Mode`}
+              disabled={cursorMatchedCount === 0}
+              onClick={onSelectCursorModels}
+              size="sm"
+              type="button"
+              variant="outline"
             >
-              <div className="flex min-w-0 items-center gap-2">
-                <Checkbox
-                  aria-label={`Select all ${modelGroup.model} levels`}
-                  checked={selectedLevelCount === totalLevelCount}
-                  indeterminate={
-                    selectedLevelCount > 0 &&
-                    selectedLevelCount < totalLevelCount
+              Cursor models
+            </Button>
+
+            <Button
+              aria-label={`Select Cursor models, including ${cursorMaxMatchedCount} that require legacy Max Mode`}
+              disabled={cursorMaxMatchedCount === 0}
+              onClick={onSelectCursorModelsWithMax}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Cursor models{" "}
+              <span className="text-muted-foreground">[MAX included]</span>
+            </Button>
+          </div>
+        </DropdownMenuGroup>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Models</DropdownMenuLabel>
+
+          <div className="px-2 pb-2">
+            <InputGroup>
+              <InputGroupInput
+                aria-label="Search models"
+                onKeyDown={(e) => {
+                  if (
+                    e.key.length === 1 &&
+                    !e.ctrlKey &&
+                    !e.metaKey &&
+                    !e.altKey
+                  ) {
+                    e.stopPropagation();
                   }
-                  onCheckedChange={() => onToggleModel(configIds)}
-                  id={modelGroup.model}
-                />
-
-                <Label
-                  className="min-w-0 flex-1 truncate font-medium"
-                  htmlFor={modelGroup.model}
+                }}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search models..."
+                type="text"
+                value={searchQuery}
+              />
+              <InputGroupAddon>
+                <SearchIcon aria-hidden />
+              </InputGroupAddon>
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  onClick={() => setSearchQuery("")}
+                  className={searchQuery.length > 0 ? "flex" : "hidden"}
                 >
-                  {modelGroup.model}
-                </Label>
+                  <X />
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+          </div>
+        </DropdownMenuGroup>
 
-                <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                  {selectedLevelCount}/{totalLevelCount}
-                </span>
-              </div>
+        <DropdownMenuGroup className="flex max-h-80 flex-col gap-1 overflow-y-auto">
+          {visibleModels.length === 0 ? (
+            <div className="text-muted-foreground px-2 py-3 text-sm">
+              No models found.
+            </div>
+          ) : (
+            visibleModels.map((modelGroup) => {
+              const configIds = modelGroup.rows.map((row) => row.config);
+              const selectedLevelIds = configIds.filter((config) =>
+                selectedConfigs.has(config),
+              );
+              const selectedLevelCount = selectedLevelIds.length;
+              const totalLevelCount = modelGroup.rows.length;
 
-              <ToggleGroup
-                aria-label={`${modelGroup.model} reasoning levels`}
-                className="ml-6 max-w-full flex-wrap"
-                onValueChange={(values) =>
-                  onToggleLevels(configIds, new Set(values))
-                }
-                size="sm"
-                spacing={0}
-                value={selectedLevelIds}
-                multiple
-                variant="outline"
-              >
-                {modelGroup.rows.map((row) => {
-                  const effort = getReasoningEffort(row);
+              return (
+                <DropdownMenuItem
+                  closeOnClick={false}
+                  className="focus:text-foreground focus:**:text-foreground data-highlighted:text-foreground data-highlighted:**:text-foreground flex-col items-stretch gap-2 p-2 focus:bg-transparent data-highlighted:bg-transparent"
+                  key={modelGroup.model}
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Checkbox
+                      aria-label={`Select all ${modelGroup.model} levels`}
+                      checked={selectedLevelCount === totalLevelCount}
+                      indeterminate={
+                        selectedLevelCount > 0 &&
+                        selectedLevelCount < totalLevelCount
+                      }
+                      onCheckedChange={() => onToggleModel(configIds)}
+                      id={modelGroup.model}
+                    />
 
-                  return (
-                    <ToggleGroupItem
-                      aria-label={`${modelGroup.model} ${effort} reasoning level`}
-                      key={row.config}
-                      pressed={selectedLevelIds.includes(row.config)}
-                      size="sm"
-                      title={[
-                        effort.toUpperCase(),
-                        row.mean_cost_usd === null
-                          ? null
-                          : `$${row.mean_cost_usd.toFixed(2)}`,
-                        `${(row.pass_at_1 * 100).toFixed(0)}%`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                      value={row.config}
+                    <Label
+                      className="min-w-0 flex-1 truncate font-medium"
+                      htmlFor={modelGroup.model}
                     >
-                      {effort}
-                    </ToggleGroupItem>
-                  );
-                })}
-              </ToggleGroup>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>
-);
+                      {modelGroup.model}
+                    </Label>
+
+                    <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                      {selectedLevelCount}/{totalLevelCount}
+                    </span>
+                  </div>
+
+                  <ToggleGroup
+                    aria-label={`${modelGroup.model} reasoning levels`}
+                    className="ml-6 max-w-full flex-wrap"
+                    onValueChange={(values) =>
+                      onToggleLevels(configIds, new Set(values))
+                    }
+                    size="sm"
+                    spacing={0}
+                    value={selectedLevelIds}
+                    multiple
+                    variant="outline"
+                  >
+                    {modelGroup.rows.map((row) => {
+                      const effort = getReasoningEffort(row);
+
+                      return (
+                        <ToggleGroupItem
+                          aria-label={`${modelGroup.model} ${effort} reasoning level`}
+                          key={row.config}
+                          pressed={selectedLevelIds.includes(row.config)}
+                          size="sm"
+                          title={[
+                            effort.toUpperCase(),
+                            row.mean_cost_usd === null
+                              ? null
+                              : `$${row.mean_cost_usd.toFixed(2)}`,
+                            `${(row.pass_at_1 * 100).toFixed(0)}%`,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          value={row.config}
+                        >
+                          {effort}
+                        </ToggleGroupItem>
+                      );
+                    })}
+                  </ToggleGroup>
+                </DropdownMenuItem>
+              );
+            })
+          )}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
 
 /**
  * Coordinates shared configuration filters for both leaderboard views.
