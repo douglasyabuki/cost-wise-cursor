@@ -4,11 +4,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { DeepSweLeaderboardRow } from "@/types-and-constants/deep-swe";
+import {
+  compareModelNames,
+  formatCompactNumber,
+  formatConfidence,
+  formatCost,
+  formatCostEfficiency,
+  formatScore,
+  getConfidenceBounds,
+  getCostEfficiency,
+  getModelColor,
+  getReasoningEffort,
+} from "@/utils/deep-swe";
 
 type RankingMode = "best" | "all";
 type RankingMetric = "performance" | "costEfficiency";
 
-export interface DeepSwePerformanceRankingChartProps {
+interface DeepSwePerformanceRankingChartProps {
   rows: readonly DeepSweLeaderboardRow[];
   onConfigSelect?: (config: string | null) => void;
 }
@@ -43,11 +55,6 @@ interface ScoreAxisProps {
   ticks: readonly number[];
 }
 
-interface ConfidenceBounds {
-  lower: number;
-  upper: number;
-}
-
 const RANKING_MODE_OPTIONS = [
   { label: "Best", value: "best" },
   { label: "All effort levels", value: "all" },
@@ -69,42 +76,8 @@ const REASONING_EFFORT_RANK: Readonly<Record<string, number>> = {
   max: 6,
 };
 
-const PROVIDER_COLORS = {
-  anthropic: ["#f97316", "#fb923c", "#ea580c"],
-  openai: ["#22c55e", "#4ade80", "#16a34a"],
-  google: ["#60a5fa", "#38bdf8", "#2563eb"],
-  xai: ["#94a3b8", "#cbd5e1", "#64748b"],
-  zhipu: ["#06b6d4", "#22d3ee", "#0891b2"],
-  moonshot: ["#f43f5e", "#fb7185", "#e11d48"],
-  alibaba: ["#14b8a6", "#2dd4bf", "#0f766e"],
-  deepseek: ["#a855f7", "#c084fc", "#7e22ce"],
-  meta: ["#3b82f6", "#60a5fa", "#1d4ed8"],
-  other: ["#a3a3a3", "#d4d4d4", "#737373"],
-} as const;
-
-type ModelProvider = keyof typeof PROVIDER_COLORS;
-
 const SCORE_TICK_STEP = 20;
 const MINIMUM_SCORE_AXIS_MAXIMUM = 80;
-
-const compactNumberFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-const modelNameCollator = new Intl.Collator("en-US", {
-  numeric: true,
-  sensitivity: "base",
-});
-
-/**
- * Returns the display label for a row's reasoning effort.
- *
- * @param row - Leaderboard configuration.
- * @returns Reasoning-effort label.
- */
-const getReasoningEffort = (row: DeepSweLeaderboardRow): string =>
-  row.reasoning_effort ?? "default";
 
 /**
  * Returns a sortable rank for a reasoning-effort label.
@@ -172,162 +145,9 @@ const groupRowsByModel = (
     .sort(
       (first, second) =>
         second.bestRow.pass_at_1 - first.bestRow.pass_at_1 ||
-        modelNameCollator.compare(first.model, second.model),
+        compareModelNames(first.model, second.model),
     );
 };
-
-/**
- * Returns the provider family for a model identifier.
- *
- * @param model - DeepSWE model identifier.
- * @returns Provider-family key.
- */
-const getModelProvider = (model: string): ModelProvider => {
-  const normalizedModel = model.toLowerCase();
-
-  if (normalizedModel.startsWith("claude")) return "anthropic";
-  if (normalizedModel.startsWith("gpt")) return "openai";
-  if (normalizedModel.startsWith("gemini")) return "google";
-  if (normalizedModel.startsWith("grok")) return "xai";
-  if (normalizedModel.startsWith("glm")) return "zhipu";
-  if (normalizedModel.startsWith("kimi")) return "moonshot";
-  if (normalizedModel.startsWith("qwen")) return "alibaba";
-  if (normalizedModel.startsWith("deepseek")) return "deepseek";
-  if (normalizedModel.startsWith("muse")) return "meta";
-
-  return "other";
-};
-
-/**
- * Returns a stable palette index for a model identifier.
- *
- * @param model - DeepSWE model identifier.
- * @param paletteSize - Number of available provider shades.
- * @returns Stable zero-based palette index.
- */
-const getModelPaletteIndex = (model: string, paletteSize: number): number => {
-  let hash = 0;
-
-  for (const character of model) {
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  }
-
-  return hash % paletteSize;
-};
-
-/**
- * Returns a stable provider shade for a model.
- *
- * @param model - DeepSWE model identifier.
- * @returns Provider-family color with a stable per-model variant.
- */
-const getModelColor = (model: string): string => {
-  const palette = PROVIDER_COLORS[getModelProvider(model)];
-  const paletteIndex = getModelPaletteIndex(model, palette.length);
-
-  return palette[paletteIndex] ?? palette[0];
-};
-
-/**
- * Formats a nullable number in compact notation.
- *
- * @param value - Value to format.
- * @returns Compact value or an em dash when unavailable.
- */
-const formatCompactNumber = (value: number | null): string =>
-  value === null || !Number.isFinite(value)
-    ? "—"
-    : compactNumberFormatter.format(value);
-
-/**
- * Formats an average benchmark-task cost.
- *
- * @param value - Cost in US dollars.
- * @returns Dollar value or an em dash when unavailable.
- */
-const formatCost = (value: number | null): string =>
-  value === null || !Number.isFinite(value) ? "—" : `$${value.toFixed(2)}`;
-
-/**
- * Formats a Pass@1 value as a percentage.
- *
- * @param value - Fractional Pass@1 value.
- * @returns Percentage with one decimal place.
- */
-const formatScore = (value: number): string => `${(value * 100).toFixed(1)}%`;
-
-/**
- * Calculates Pass@1 percentage points per DeepSWE benchmark dollar.
- *
- * @param row - Leaderboard configuration.
- * @returns Cost-efficiency score or null when cost is unavailable.
- */
-const getCostEfficiency = (row: DeepSweLeaderboardRow): number | null => {
-  const cost = row.mean_cost_usd;
-
-  if (cost === null || !Number.isFinite(cost) || cost <= 0) {
-    return null;
-  }
-
-  return (row.pass_at_1 * 100) / cost;
-};
-
-/**
- * Formats a DeepSWE cost-efficiency score.
- *
- * @param value - Pass@1 percentage points per benchmark dollar.
- * @returns Formatted score or an em dash when unavailable.
- */
-const formatCostEfficiency = (value: number | null): string =>
-  value === null || !Number.isFinite(value) ? "—" : `${value.toFixed(1)} pts/$`;
-
-/**
- * Returns finite confidence bounds for a leaderboard row.
- *
- * @param row - Leaderboard configuration.
- * @returns Fractional lower and upper confidence bounds.
- */
-const getConfidenceBounds = (row: DeepSweLeaderboardRow): ConfidenceBounds => {
-  const lower =
-    typeof row.ci_lo === "number" && Number.isFinite(row.ci_lo)
-      ? row.ci_lo
-      : row.pass_at_1;
-
-  const upper =
-    typeof row.ci_hi === "number" && Number.isFinite(row.ci_hi)
-      ? row.ci_hi
-      : row.pass_at_1;
-
-  return {
-    lower: Math.min(lower, upper),
-    upper: Math.max(lower, upper),
-  };
-};
-
-/**
- * Returns a row's confidence-interval half-width.
- *
- * @param row - Leaderboard configuration.
- * @returns Fractional confidence-interval half-width.
- */
-const getConfidenceHalfWidth = (row: DeepSweLeaderboardRow): number => {
-  if (typeof row.ci_half === "number" && Number.isFinite(row.ci_half)) {
-    return Math.max(0, row.ci_half);
-  }
-
-  const { lower, upper } = getConfidenceBounds(row);
-
-  return Math.max(0, (upper - lower) / 2);
-};
-
-/**
- * Formats a row's confidence interval.
- *
- * @param row - Leaderboard configuration.
- * @returns Percentage interval prefixed by a plus/minus sign.
- */
-const formatConfidence = (row: DeepSweLeaderboardRow): string =>
-  `±${(getConfidenceHalfWidth(row) * 100).toFixed(1)}%`;
 
 /**
  * Orders configurations by Pass@1.
@@ -341,7 +161,7 @@ const compareByPerformance = (
   second: DeepSweLeaderboardRow,
 ): number =>
   second.pass_at_1 - first.pass_at_1 ||
-  modelNameCollator.compare(first.model, second.model) ||
+  compareModelNames(first.model, second.model) ||
   getReasoningEffortRank(getReasoningEffort(second)) -
     getReasoningEffortRank(getReasoningEffort(first));
 

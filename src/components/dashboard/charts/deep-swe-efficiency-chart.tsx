@@ -24,10 +24,20 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type {
   DeepSweLeaderboard,
   DeepSweLeaderboardRow,
+  DeepSweReasoningEffort,
   DeepSweVersion,
   EfficiencyMetric,
 } from "@/types-and-constants/deep-swe";
 import { formatLongDate } from "@/utils/date";
+import {
+  formatMetricTick,
+  formatMetricValue,
+  getMetricAxisLabel,
+  getMetricValue,
+  getModelColor,
+  getReasoningEffort,
+  getReasoningEffortOrder,
+} from "@/utils/deep-swe";
 
 interface DeepSweEfficiencyChartProps {
   leaderboard: DeepSweLeaderboard;
@@ -143,21 +153,8 @@ const METRIC_OPTIONS = [
   { label: "Agent steps", value: "agentSteps" },
 ] as const satisfies readonly ToggleFilterOption<EfficiencyMetric>[];
 
-const REASONING_EFFORT_ORDER = [
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "default",
-] as const;
-
-type KnownReasoningEffort = (typeof REASONING_EFFORT_ORDER)[number];
-
 const PREFERRED_LABEL_EFFORTS: Readonly<
-  Partial<Record<string, KnownReasoningEffort>>
+  Partial<Record<string, DeepSweReasoningEffort>>
 > = {
   "gpt-5-6-sol": "medium",
   "gpt-5-6-terra": "medium",
@@ -177,201 +174,12 @@ const X_AXIS_TARGET_TICK_COUNT = 6;
 const SCORE_AXIS_MINIMUM_MAX = 80;
 const SCORE_TICK_STEP = 10;
 
-const PROVIDER_COLORS = {
-  anthropic: ["#f97316", "#fb923c", "#ea580c"],
-  openai: ["#22c55e", "#4ade80", "#16a34a"],
-  google: ["#60a5fa", "#38bdf8", "#2563eb"],
-  xai: ["#94a3b8", "#cbd5e1", "#64748b"],
-  zhipu: ["#06b6d4", "#22d3ee", "#0891b2"],
-  moonshot: ["#f43f5e", "#fb7185", "#e11d48"],
-  alibaba: ["#14b8a6", "#2dd4bf", "#0f766e"],
-  deepseek: ["#a855f7", "#c084fc", "#7e22ce"],
-  meta: ["#3b82f6", "#60a5fa", "#1d4ed8"],
-  other: ["#a3a3a3", "#d4d4d4", "#737373"],
-} as const;
-
-type ModelProvider = keyof typeof PROVIDER_COLORS;
-
 const chartConfig = {
   score: {
     label: "DeepSWE score",
     color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
-
-const compactNumberFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-/**
- * Returns the selected metric from a leaderboard row.
- *
- * @param row - Leaderboard configuration.
- * @param metric - Selected efficiency metric.
- * @returns Metric value or null when unavailable.
- */
-const getMetricValue = (
-  row: DeepSweLeaderboardRow,
-  metric: EfficiencyMetric,
-): number | null => {
-  switch (metric) {
-    case "cost":
-      return row.mean_cost_usd;
-
-    case "outputTokens":
-      return row.mean_output_tokens;
-
-    case "agentSteps":
-      return row.mean_agent_steps;
-  }
-};
-
-/**
- * Returns the axis label for a metric.
- *
- * @param metric - Selected efficiency metric.
- * @returns Human-readable axis label.
- */
-const getMetricAxisLabel = (metric: EfficiencyMetric): string => {
-  switch (metric) {
-    case "cost":
-      return "Average cost per task";
-
-    case "outputTokens":
-      return "Average output tokens";
-
-    case "agentSteps":
-      return "Average agent steps";
-  }
-};
-
-/**
- * Formats a metric for an axis tick.
- *
- * @param metric - Selected metric.
- * @param value - Numeric metric value.
- * @returns Compact axis value.
- */
-const formatMetricTick = (metric: EfficiencyMetric, value: number): string => {
-  switch (metric) {
-    case "cost":
-      return `$${Number.isInteger(value) ? value : value.toFixed(1)}`;
-
-    case "outputTokens":
-      return compactNumberFormatter.format(value);
-
-    case "agentSteps":
-      return Math.round(value).toString();
-  }
-};
-
-/**
- * Formats a metric for a tooltip.
- *
- * @param metric - Selected metric.
- * @param value - Numeric metric value.
- * @returns Detailed metric value.
- */
-const formatMetricValue = (metric: EfficiencyMetric, value: number): string => {
-  switch (metric) {
-    case "cost":
-      return `$${value.toFixed(2)}`;
-
-    case "outputTokens":
-      return `${compactNumberFormatter.format(value)} tokens`;
-
-    case "agentSteps":
-      return `${Math.round(value)} steps`;
-  }
-};
-
-/**
- * Returns the provider family for a model identifier.
- *
- * @param model - DeepSWE model identifier.
- * @returns Provider family key.
- */
-const getModelProvider = (model: string): ModelProvider => {
-  const normalizedModel = model.toLowerCase();
-
-  if (normalizedModel.startsWith("claude")) {
-    return "anthropic";
-  }
-
-  if (normalizedModel.startsWith("gpt")) {
-    return "openai";
-  }
-
-  if (normalizedModel.startsWith("gemini")) {
-    return "google";
-  }
-
-  if (normalizedModel.startsWith("grok")) {
-    return "xai";
-  }
-
-  if (normalizedModel.startsWith("glm")) {
-    return "zhipu";
-  }
-
-  if (normalizedModel.startsWith("kimi")) {
-    return "moonshot";
-  }
-
-  if (normalizedModel.startsWith("qwen")) {
-    return "alibaba";
-  }
-
-  if (normalizedModel.startsWith("deepseek")) {
-    return "deepseek";
-  }
-
-  if (normalizedModel.startsWith("muse")) {
-    return "meta";
-  }
-
-  return "other";
-};
-
-/**
- * Returns a stable palette index for a model identifier.
- *
- * @param model - DeepSWE model identifier.
- * @param paletteSize - Number of available provider shades.
- * @returns Stable zero-based palette index.
- */
-const getModelPaletteIndex = (model: string, paletteSize: number): number => {
-  let hash = 0;
-
-  for (const character of model) {
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  }
-
-  return hash % paletteSize;
-};
-
-/**
- * Returns a stable provider shade for a model.
- *
- * @param model - DeepSWE model identifier.
- * @returns Provider-family color with a stable per-model variant.
- */
-const getModelColor = (model: string): string => {
-  const palette = PROVIDER_COLORS[getModelProvider(model)];
-  const paletteIndex = getModelPaletteIndex(model, palette.length);
-
-  return palette[paletteIndex] ?? palette[0];
-};
-
-/**
- * Returns the display label for a row's reasoning effort.
- *
- * @param row - Leaderboard configuration.
- * @returns Reasoning effort label.
- */
-const getReasoningEffort = (row: DeepSweLeaderboardRow): string =>
-  row.reasoning_effort ?? "default";
 
 /**
  * Normalizes a model identifier for stable configuration lookups.
@@ -385,20 +193,6 @@ const normalizeModelIdentifier = (model: string): string =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-
-/**
- * Returns the display and connection order for a reasoning effort.
- *
- * @param effort - Reasoning effort label.
- * @returns Stable numeric effort order.
- */
-const getReasoningEffortOrder = (effort: string): number => {
-  const index = REASONING_EFFORT_ORDER.indexOf(
-    effort.toLowerCase() as KnownReasoningEffort,
-  );
-
-  return index === -1 ? REASONING_EFFORT_ORDER.length : index;
-};
 
 /**
  * Converts leaderboard rows into model chart series.

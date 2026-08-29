@@ -21,9 +21,14 @@ import type {
   DeepSweVersion,
 } from "@/types-and-constants/deep-swe";
 import {
+  compareModelNames,
+  getReasoningEffort,
+  getReasoningEffortOrder,
+} from "@/utils/deep-swe";
+import {
   type MatchedLeaderboardRow,
   matchLeaderboardRows,
-} from "@/utils/cursor-model-match";
+} from "@/utils/deep-swe-cursor-model-match";
 
 import { DeepSweEfficiencyChart } from "./charts/deep-swe-efficiency-chart";
 import { DeepSwePerformanceRankingChart } from "./charts/deep-swe-performance-ranking-chart";
@@ -81,45 +86,6 @@ const VERSION_OPTIONS = [
   { label: "v1", value: "v1" },
 ] as const satisfies readonly ToggleFilterOption<DeepSweVersion>[];
 
-const REASONING_EFFORT_ORDER = [
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "default",
-] as const;
-
-const modelNameCollator = new Intl.Collator("en-US", {
-  numeric: true,
-  sensitivity: "base",
-});
-
-/**
- * Returns the display label for a row's reasoning effort.
- *
- * @param row - Leaderboard configuration.
- * @returns Reasoning-effort label.
- */
-const getReasoningEffort = (row: DeepSweLeaderboardRow): string =>
-  row.reasoning_effort ?? "default";
-
-/**
- * Returns the display order for a reasoning-effort label.
- *
- * @param effort - Reasoning-effort label.
- * @returns Stable numeric order.
- */
-const getReasoningEffortOrder = (effort: string): number => {
-  const index = REASONING_EFFORT_ORDER.indexOf(
-    effort.toLowerCase() as (typeof REASONING_EFFORT_ORDER)[number],
-  );
-
-  return index === -1 ? REASONING_EFFORT_ORDER.length : index;
-};
-
 /**
  * Groups configurations by model for the shared filter.
  *
@@ -155,9 +121,7 @@ const groupRowsByModel = (
         );
       }),
     }))
-    .sort((first, second) =>
-      modelNameCollator.compare(first.model, second.model),
-    );
+    .sort((first, second) => compareModelNames(first.model, second.model));
 };
 
 /**
