@@ -29,6 +29,13 @@ export default defineConfig({
         secure: true,
         rewrite: (requestPath) => requestPath.replace(/^\/deep-swe/, ""),
       },
+
+      "/frontier-code": {
+        target: "https://cognition.com",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/frontier-code/, ""),
+      },
     },
   },
 });
