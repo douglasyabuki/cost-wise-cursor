@@ -1,5 +1,4 @@
 import type {
-  FrontierCodeEfficiencyMetric,
   FrontierCodeLeaderboard,
   FrontierCodeLeaderboardRow,
   FrontierCodeResult,
@@ -24,11 +23,6 @@ const FRONTIER_CODE_REASONING_EFFORT_ORDER = [
   "xhigh",
   "max",
 ] as const;
-
-const compactNumberFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
 
 const modelNameCollator = new Intl.Collator("en-US", {
   numeric: true,
@@ -64,7 +58,6 @@ const isFrontierCodeResult = (value: unknown): value is FrontierCodeResult =>
   isFiniteNumber(value.correct) &&
   isFiniteNumber(value.new_score) &&
   isFiniteNumber(value.cost) &&
-  isFiniteNumber(value.tokens) &&
   (value.flagged_rate === undefined ||
     value.flagged_rate === null ||
     isFiniteNumber(value.flagged_rate));
@@ -210,9 +203,8 @@ export const getFrontierCodeRows = (
           reasoning_effort: effort,
           config: createFrontierCodeConfigId(model, effort),
           score: result.new_score,
-          correctness: result.correct,
+          pass_rate: result.correct,
           cost: result.cost,
-          tokens: result.tokens,
           flagged_rate: result.flagged_rate ?? null,
         },
       ];
@@ -256,31 +248,22 @@ export const formatFrontierCodeScore = (value: number): string =>
   `${(value * 100).toFixed(1)}%`;
 
 /**
- * Formats a FrontierCode correctness rate as a percentage.
+ * Formats a FrontierCode pass rate as a percentage.
  *
- * @param value - Fractional correctness rate.
+ * @param value - Fractional pass rate.
  * @returns Percentage with one decimal place.
  */
-export const formatFrontierCodeCorrectness = (value: number): string =>
+export const formatFrontierCodePassRate = (value: number): string =>
   `${(value * 100).toFixed(1)}%`;
 
 /**
- * Formats a benchmark cost in US dollars.
+ * Formats a FrontierCode benchmark cost in US dollars.
  *
  * @param value - Benchmark cost.
- * @returns Dollar value.
+ * @returns Dollar value with two decimal places.
  */
 export const formatFrontierCodeCost = (value: number): string =>
   `$${value.toFixed(2)}`;
-
-/**
- * Formats a token count using compact notation.
- *
- * @param value - Token count.
- * @returns Compact token count.
- */
-export const formatFrontierCodeTokens = (value: number): string =>
-  compactNumberFormatter.format(value);
 
 /**
  * Calculates FrontierCode score percentage points per benchmark dollar.
@@ -304,56 +287,6 @@ export const getFrontierCodeCostEfficiency = (
 export const formatFrontierCodeCostEfficiency = (
   value: number | null,
 ): string => (value === null ? "—" : `${value.toFixed(1)} pts/$`);
-
-/**
- * Returns a selected efficiency-chart metric from a row.
- *
- * @param row - FrontierCode configuration row.
- * @param metric - Selected horizontal-axis metric.
- * @returns Metric value.
- */
-export const getFrontierCodeMetricValue = (
-  row: FrontierCodeLeaderboardRow,
-  metric: FrontierCodeEfficiencyMetric,
-): number => (metric === "cost" ? row.cost : row.tokens);
-
-/**
- * Returns the horizontal-axis label for a FrontierCode metric.
- *
- * @param metric - Selected horizontal-axis metric.
- * @returns Human-readable axis label.
- */
-export const getFrontierCodeMetricAxisLabel = (
-  metric: FrontierCodeEfficiencyMetric,
-): string => (metric === "cost" ? "Benchmark cost" : "Output tokens");
-
-/**
- * Formats a FrontierCode metric for an axis tick.
- *
- * @param metric - Selected horizontal-axis metric.
- * @param value - Numeric metric value.
- * @returns Formatted axis tick.
- */
-export const formatFrontierCodeMetricTick = (
-  metric: FrontierCodeEfficiencyMetric,
-  value: number,
-): string =>
-  metric === "cost" ? `$${value.toFixed(0)}` : formatFrontierCodeTokens(value);
-
-/**
- * Formats a FrontierCode metric for a tooltip or accessible label.
- *
- * @param metric - Selected horizontal-axis metric.
- * @param value - Numeric metric value.
- * @returns Formatted metric value.
- */
-export const formatFrontierCodeMetricValue = (
-  metric: FrontierCodeEfficiencyMetric,
-  value: number,
-): string =>
-  metric === "cost"
-    ? formatFrontierCodeCost(value)
-    : `${formatFrontierCodeTokens(value)} tokens`;
 
 /**
  * Formats a selected FrontierCode subset for UI copy.

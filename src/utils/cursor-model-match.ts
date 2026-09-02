@@ -1,21 +1,22 @@
-import type { DeepSweLeaderboardRow } from "@/types-and-constants/deep-swe";
-
+/**
+ * Strategy used to match a benchmark model to a Cursor model.
+ */
 export type ModelMatchStrategy = "exact" | "alias" | "token-order";
 
 /**
- * Describes a successful match between a DeepSWE model and a Cursor model.
+ * Describes a successful match between a benchmark model and a Cursor model.
  */
 export interface CursorModelMatch<T> {
   cursorModel: T;
   cursorName: string;
-  deepSweName: string;
+  benchmarkName: string;
   strategy: ModelMatchStrategy;
 }
 
 /**
- * DeepSWE row enriched with its corresponding Cursor model.
+ * Benchmark row enriched with its corresponding Cursor model.
  */
-export type MatchedLeaderboardRow<T> = DeepSweLeaderboardRow & {
+export type CursorMatchedRow<Row extends { model: string }, T> = Row & {
   cursorMatch: CursorModelMatch<T> | null;
 };
 
@@ -27,18 +28,18 @@ interface CursorModelCandidate<T> {
 }
 
 /**
- * Explicit mappings for models whose names differ semantically.
+ * Explicit mappings for benchmark model names whose names differ semantically.
  *
- * Keys use the DeepSWE format. Values use the normalized Cursor format.
+ * Keys use a benchmark format. Values use the normalized Cursor format.
  */
-const CURSOR_NAME_BY_DEEP_SWE_NAME: Readonly<Record<string, string>> = {
+const CURSOR_NAME_BY_BENCHMARK_NAME: Readonly<Record<string, string>> = {
   "gemini-3-1-pro-preview": "gemini-3-1-pro",
 };
 
 /**
  * Converts a model name into a lowercase, hyphen-separated identifier.
  *
- * @param modelName - Model name from DeepSWE or Cursor.
+ * @param modelName - Model name from a benchmark or Cursor.
  * @returns Normalized model name.
  *
  * @example
@@ -78,44 +79,44 @@ const createModelSignature = (normalizedName: string): string => {
  * Creates a complete Cursor model match from a candidate.
  *
  * @param candidate - Matched Cursor model candidate.
- * @param deepSweName - Original DeepSWE model name.
+ * @param benchmarkName - Original benchmark model name.
  * @param strategy - Strategy used to find the match.
  * @returns Complete Cursor model match.
  */
 const createCursorModelMatch = <T>(
   candidate: CursorModelCandidate<T>,
-  deepSweName: string,
+  benchmarkName: string,
   strategy: ModelMatchStrategy,
 ): CursorModelMatch<T> => {
   return {
     cursorModel: candidate.cursorModel,
     cursorName: candidate.cursorName,
-    deepSweName,
+    benchmarkName,
     strategy,
   };
 };
 
 /**
- * Finds the corresponding Cursor model for a DeepSWE model name.
+ * Finds the corresponding Cursor model for a benchmark model name.
  *
  * Matching order:
  * 1. Exact normalized name
  * 2. Explicit alias
  * 3. Same identity tokens and version, with different token order
  *
- * @param deepSweName - Canonical DeepSWE model name.
+ * @param benchmarkName - Canonical benchmark model name.
  * @param cursorModels - Cursor model records.
  * @param getCursorName - Returns the name from a Cursor model record.
  * @returns The matched Cursor model and strategy, or `null`.
  */
 export const matchCursorModel = <T>(
-  deepSweName: string,
+  benchmarkName: string,
   cursorModels: readonly T[],
   getCursorName: (model: T) => string,
 ): CursorModelMatch<T> | null => {
-  const normalizedDeepSweName = normalizeModelName(deepSweName);
+  const normalizedBenchmarkName = normalizeModelName(benchmarkName);
 
-  if (!normalizedDeepSweName) {
+  if (!normalizedBenchmarkName) {
     return null;
   }
 
@@ -134,14 +135,14 @@ export const matchCursorModel = <T>(
   );
 
   const exactMatch = candidates.find(
-    ({ normalizedName }) => normalizedName === normalizedDeepSweName,
+    ({ normalizedName }) => normalizedName === normalizedBenchmarkName,
   );
 
   if (exactMatch) {
-    return createCursorModelMatch(exactMatch, deepSweName, "exact");
+    return createCursorModelMatch(exactMatch, benchmarkName, "exact");
   }
 
-  const alias = CURSOR_NAME_BY_DEEP_SWE_NAME[normalizedDeepSweName];
+  const alias = CURSOR_NAME_BY_BENCHMARK_NAME[normalizedBenchmarkName];
 
   if (alias) {
     const aliasMatch = candidates.find(
@@ -149,11 +150,11 @@ export const matchCursorModel = <T>(
     );
 
     if (aliasMatch) {
-      return createCursorModelMatch(aliasMatch, deepSweName, "alias");
+      return createCursorModelMatch(aliasMatch, benchmarkName, "alias");
     }
   }
 
-  const targetSignature = createModelSignature(normalizedDeepSweName);
+  const targetSignature = createModelSignature(normalizedBenchmarkName);
 
   const signatureMatches = candidates.filter(
     ({ signature }) => signature === targetSignature,
@@ -174,25 +175,25 @@ export const matchCursorModel = <T>(
     return null;
   }
 
-  return createCursorModelMatch(signatureMatch, deepSweName, "token-order");
+  return createCursorModelMatch(signatureMatch, benchmarkName, "token-order");
 };
 
 /**
- * Matches Cursor models to DeepSWE leaderboard rows.
+ * Matches Cursor models to benchmark leaderboard rows.
  *
- * Each unique DeepSWE model is matched once, while every returned row receives
- * the same stable `cursorMatch` property.
+ * Each unique benchmark model is matched once, while every returned row
+ * receives the same stable `cursorMatch` property.
  *
- * @param rows - DeepSWE leaderboard rows.
+ * @param rows - Benchmark leaderboard rows.
  * @param cursorModels - Cursor model records.
  * @param getCursorName - Returns the name from a Cursor model record.
  * @returns Leaderboard rows with their Cursor match or `null`.
  */
-export const matchLeaderboardRows = <T>(
-  rows: readonly DeepSweLeaderboardRow[],
+export const matchLeaderboardRows = <Row extends { model: string }, T>(
+  rows: readonly Row[],
   cursorModels: readonly T[],
   getCursorName: (model: T) => string,
-): MatchedLeaderboardRow<T>[] => {
+): CursorMatchedRow<Row, T>[] => {
   const matchesByModel = new Map<string, CursorModelMatch<T> | null>();
 
   rows.forEach((row) => {

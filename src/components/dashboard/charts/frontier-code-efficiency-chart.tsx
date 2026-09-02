@@ -20,35 +20,19 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
-import type {
-  DeepSweLeaderboard,
-  DeepSweLeaderboardRow,
-  DeepSweReasoningEffort,
-  DeepSweVersion,
-  EfficiencyMetric,
-} from "@/types-and-constants/deep-swe";
-import { formatLongDate } from "@/utils/date";
+import type { FrontierCodeLeaderboardRow } from "@/types-and-constants/frontier-code";
+import { getModelColor } from "@/utils/deep-swe";
 import {
-  formatMetricTick,
-  formatMetricValue,
-  getMetricAxisLabel,
-  getMetricValue,
-  getModelColor,
-  getReasoningEffort,
-  getReasoningEffortOrder,
-} from "@/utils/deep-swe";
+  formatFrontierCodeCost,
+  getFrontierCodeReasoningEffortOrder,
+} from "@/utils/frontier-code";
 
-interface DeepSweEfficiencyChartProps {
-  leaderboard: DeepSweLeaderboard;
-  metric: EfficiencyMetric;
-  rows: readonly DeepSweLeaderboardRow[];
-  version: DeepSweVersion;
+/**
+ * Public properties for the FrontierCode score-versus-cost chart.
+ */
+export interface FrontierCodeComparisonChartProps {
+  rows: readonly FrontierCodeLeaderboardRow[];
 }
-
-type DeepSweEfficiencyChartContentProps = Omit<
-  DeepSweEfficiencyChartProps,
-  "version"
->;
 
 interface ChartPoint {
   config: string;
@@ -56,8 +40,8 @@ interface ChartPoint {
   effort: string;
   isLabelAnchor: boolean;
   label: string;
+  cost: number;
   score: number;
-  metricValue: number;
 }
 
 interface ChartSeries {
@@ -65,11 +49,6 @@ interface ChartSeries {
   color: string;
   labelConfig: string;
   points: ChartPoint[];
-}
-
-interface MetricAxis {
-  maximum: number;
-  ticks: number[];
 }
 
 interface ScatterShapeProps {
@@ -89,18 +68,17 @@ interface ScatterLineProps {
   points?: ScatterLinePoint[];
 }
 
-interface EfficiencyDotProps extends ScatterShapeProps {
+interface ComparisonDotProps extends ScatterShapeProps {
   activeConfig: string | null;
   activeModel: string | null;
   color: string;
-  metric: EfficiencyMetric;
   pinnedConfig: string | null;
   onHover: (config: string) => void;
   onLeave: () => void;
   onPin: (config: string) => void;
 }
 
-interface EfficiencyLineProps extends ScatterLineProps {
+interface ComparisonLineProps extends ScatterLineProps {
   activeModel: string | null;
   color: string;
   hoverConfig: string;
@@ -123,7 +101,7 @@ interface LabelContentProps {
   y?: number;
 }
 
-interface EfficiencyLabelProps extends LabelContentProps {
+interface ComparisonLabelProps extends LabelContentProps {
   activeModel: string | null;
   color: string;
   model: string;
@@ -132,71 +110,33 @@ interface EfficiencyLabelProps extends LabelContentProps {
   onPin: (config: string) => void;
 }
 
-const PREFERRED_LABEL_EFFORTS: Readonly<
-  Partial<Record<string, DeepSweReasoningEffort>>
-> = {
-  "gpt-5-6-sol": "medium",
-  "gpt-5-6-terra": "medium",
-  "gpt-5-6-luna": "medium",
-  "gpt-5-5": "medium",
-  "claude-opus-4-8": "high",
-  "claude-opus-4-7": "xhigh",
-  "claude-fable-5": "high",
-  "claude-sonnet-5": "high",
-  "gemini-3-5-flash": "high",
-  "gemini-3-7-flash": "medium",
-  "muse-spark-1-1": "medium",
-};
-
-const X_AXIS_PADDING_RATIO = 1.04;
-const X_AXIS_TARGET_TICK_COUNT = 6;
+const COST_AXIS_PADDING_RATIO = 1.04;
+const COST_AXIS_TARGET_TICK_COUNT = 6;
 const SCORE_AXIS_MINIMUM_MAX = 80;
 const SCORE_TICK_STEP = 10;
 
 const chartConfig = {
   score: {
-    label: "DeepSWE score",
+    label: "FrontierCode score",
     color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
 
 /**
- * Normalizes a model identifier for stable configuration lookups.
+ * Converts rows into connected model series for the score/cost chart.
  *
- * @param model - Model identifier or display name.
- * @returns Lowercase dash-delimited identifier.
- */
-const normalizeModelIdentifier = (model: string): string =>
-  model
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-/**
- * Converts leaderboard rows into model chart series.
- *
- * Each series connects the different reasoning-effort configurations
- * belonging to the same model.
- *
- * @param rows - Visible leaderboard configurations.
- * @param metric - Selected efficiency metric.
- * @returns Chart series grouped by model.
+ * @param rows - Visible FrontierCode configurations.
+ * @returns Series with one connected path per model.
  */
 const createChartSeries = (
-  rows: readonly DeepSweLeaderboardRow[],
-  metric: EfficiencyMetric,
+  rows: readonly FrontierCodeLeaderboardRow[],
 ): ChartSeries[] => {
   const groupedPoints = new Map<string, ChartPoint[]>();
 
   rows.forEach((row) => {
-    const metricValue = getMetricValue(row, metric);
+    const cost = row.cost;
 
-    if (
-      metricValue === null ||
-      !Number.isFinite(metricValue) ||
-      metricValue <= 0
-    ) {
+    if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(row.score)) {
       return;
     }
 
@@ -205,46 +145,39 @@ const createChartSeries = (
     points.push({
       config: row.config,
       model: row.model,
-      effort: getReasoningEffort(row),
+      effort: row.reasoning_effort,
       isLabelAnchor: false,
       label: "",
-      score: row.pass_at_1 * 100,
-      metricValue,
+      cost,
+      score: row.score * 100,
     });
-
     groupedPoints.set(row.model, points);
   });
 
   return [...groupedPoints.entries()]
     .map(([model, unsortedPoints]) => {
-      const points = [...unsortedPoints].sort((first, second) => {
-        const effortDifference =
-          getReasoningEffortOrder(first.effort) -
-          getReasoningEffortOrder(second.effort);
-
-        return effortDifference || first.metricValue - second.metricValue;
-      });
-      const preferredEffort =
-        PREFERRED_LABEL_EFFORTS[normalizeModelIdentifier(model)];
-      const labelPoint =
-        points.find(
-          (point) => point.effort.toLowerCase() === preferredEffort,
-        ) ?? points[points.length - 1];
+      const points = [...unsortedPoints].sort(
+        (first, second) =>
+          getFrontierCodeReasoningEffortOrder(first.effort) -
+            getFrontierCodeReasoningEffortOrder(second.effort) ||
+          first.cost - second.cost,
+      );
+      const labelPoint = points[points.length - 1];
 
       return {
         model,
         color: getModelColor(model),
-        labelConfig: labelPoint.config,
+        labelConfig: labelPoint?.config ?? "",
         points: points.map((point) => ({
           ...point,
-          isLabelAnchor: point.config === labelPoint.config,
-          label: point.config === labelPoint.config ? point.model : "",
+          isLabelAnchor: point.config === labelPoint?.config,
+          label: point.config === labelPoint?.config ? point.model : "",
         })),
       };
     })
+    .filter((series) => series.points.length > 0)
     .sort((first, second) => {
       const firstScore = Math.max(...first.points.map((point) => point.score));
-
       const secondScore = Math.max(
         ...second.points.map((point) => point.score),
       );
@@ -254,7 +187,7 @@ const createChartSeries = (
 };
 
 /**
- * Calculates the maximum score shown by the vertical axis.
+ * Calculates the vertical score-axis maximum.
  *
  * @param series - Visible chart series.
  * @returns Rounded percentage maximum.
@@ -275,9 +208,9 @@ const getScoreMaximum = (series: readonly ChartSeries[]): number => {
 };
 
 /**
- * Creates score ticks from zero through the score-domain maximum.
+ * Creates evenly spaced score-axis ticks.
  *
- * @param maximum - Score-domain maximum.
+ * @param maximum - Score-axis maximum.
  * @returns Percentage tick values.
  */
 const createScoreTicks = (maximum: number): number[] =>
@@ -287,46 +220,38 @@ const createScoreTicks = (maximum: number): number[] =>
   );
 
 /**
- * Calculates a readable tick interval for a positive numeric domain.
+ * Returns a readable 2/5/10-based tick step.
  *
- * @param maximum - Padded axis maximum.
- * @param targetTickCount - Approximate number of tick intervals.
- * @returns A 2/5/10-based tick step.
+ * @param maximum - Positive axis maximum.
+ * @returns Tick step.
  */
-const getNiceTickStep = (maximum: number, targetTickCount: number): number => {
-  if (maximum <= 0) {
-    return 1;
-  }
+const getNiceTickStep = (maximum: number): number => {
+  if (maximum <= 0) return 1;
 
-  const rawStep = maximum / targetTickCount;
+  const rawStep = maximum / COST_AXIS_TARGET_TICK_COUNT;
   const magnitude = 10 ** Math.floor(Math.log10(rawStep));
   const normalizedStep = rawStep / magnitude;
 
-  if (normalizedStep >= 5) {
-    return 10 * magnitude;
-  }
-
-  if (normalizedStep >= 2) {
-    return 5 * magnitude;
-  }
-
+  if (normalizedStep >= 5) return 10 * magnitude;
+  if (normalizedStep >= 2) return 5 * magnitude;
   return 2 * magnitude;
 };
 
 /**
- * Calculates the padded metric domain and its readable tick values.
+ * Calculates a padded cost axis.
  *
  * @param series - Visible chart series.
- * @returns Reversed X-axis maximum and ticks.
+ * @returns Axis maximum and readable ticks.
  */
-const getMetricAxis = (series: readonly ChartSeries[]): MetricAxis => {
-  const highestMetricValue = Math.max(
+const getCostAxis = (
+  series: readonly ChartSeries[],
+): { maximum: number; ticks: number[] } => {
+  const highestCost = Math.max(
     0,
-    ...series.flatMap((item) => item.points.map((point) => point.metricValue)),
+    ...series.flatMap((item) => item.points.map((point) => point.cost)),
   );
-  const maximum =
-    highestMetricValue > 0 ? highestMetricValue * X_AXIS_PADDING_RATIO : 1;
-  const step = getNiceTickStep(maximum, X_AXIS_TARGET_TICK_COUNT);
+  const maximum = highestCost > 0 ? highestCost * COST_AXIS_PADDING_RATIO : 1;
+  const step = getNiceTickStep(maximum);
   const ticks: number[] = [];
 
   for (let value = 0; value <= maximum + Number.EPSILON; value += step) {
@@ -337,80 +262,69 @@ const getMetricAxis = (series: readonly ChartSeries[]): MetricAxis => {
 };
 
 /**
- * Finds a configuration point among visible chart series.
+ * Finds a chart point by configuration id.
  *
  * @param series - Visible chart series.
- * @param config - Configuration identifier.
+ * @param config - Configuration id.
  * @returns Matching point or null.
  */
 const findChartPoint = (
   series: readonly ChartSeries[],
   config: string | null,
 ): ChartPoint | null => {
-  if (config === null) {
-    return null;
-  }
+  if (config === null) return null;
 
   for (const item of series) {
     const point = item.points.find((candidate) => candidate.config === config);
 
-    if (point) {
-      return point;
-    }
+    if (point) return point;
   }
 
   return null;
 };
 
 /**
- * Returns the focus treatment for a chart mark.
+ * Returns focus treatment for marks belonging to another model.
  *
- * @param model - Mark model identifier.
- * @param activeModel - Currently focused model identifier.
- * @returns Animated opacity and saturation styles.
+ * @param model - Mark model name.
+ * @param activeModel - Focused model name.
+ * @returns Opacity and grayscale styles.
  */
 const getModelFocusStyle = (
   model: string,
   activeModel: string | null,
-): CSSProperties => {
-  const isMuted = activeModel !== null && activeModel !== model;
-
-  return {
-    opacity: isMuted ? 0.55 : 1,
-    filter: isMuted ? "grayscale(1)" : "none",
-    transition: "opacity 150ms ease, filter 150ms ease",
-  };
-};
+): CSSProperties => ({
+  opacity: activeModel !== null && activeModel !== model ? 0.55 : 1,
+  filter:
+    activeModel !== null && activeModel !== model ? "grayscale(1)" : "none",
+  transition: "opacity 150ms ease, filter 150ms ease",
+});
 
 /**
- * Renders a chart point with a generous hit target and keyboard interaction.
+ * Renders a keyboard-accessible score/cost point.
  *
- * @param props - Recharts point geometry and interaction state.
+ * @param props - Point geometry and interaction state.
  * @returns Interactive SVG point.
  */
-const EfficiencyDot = ({
+const ComparisonDot = ({
   activeConfig,
   activeModel,
   color,
   cx,
   cy,
-  metric,
   onHover,
   onLeave,
   onPin,
   payload,
   pinnedConfig,
-}: EfficiencyDotProps): ReactElement => {
+}: ComparisonDotProps): ReactElement => {
   if (cx === undefined || cy === undefined || payload === undefined) {
     return <g />;
   }
 
   const isActive = activeConfig === payload.config;
   const isPinned = pinnedConfig === payload.config;
-  const pointColor = payload.isLabelAnchor
-    ? color
-    : `color-mix(in oklab, ${color} 84%, var(--card))`;
-  const accessibleLabel = `${payload.model}, ${payload.effort} effort, ${Math.round(payload.score)}% score, ${formatMetricValue(metric, payload.metricValue)}`;
+  const accessibleLabel = `${payload.model}, ${payload.effort} effort, ${Math.round(payload.score)}% FrontierCode score, ${formatFrontierCodeCost(payload.cost)} benchmark cost`;
 
   return (
     <g
@@ -443,7 +357,11 @@ const EfficiencyDot = ({
       <circle
         cx={cx}
         cy={cy}
-        fill={pointColor}
+        fill={
+          payload.isLabelAnchor
+            ? color
+            : `color-mix(in oklab, ${color} 84%, var(--card))`
+        }
         r={isActive ? 6 : 4}
         stroke={isActive ? "var(--background)" : "none"}
         strokeWidth={isActive ? 2 : 0}
@@ -475,12 +393,12 @@ const EfficiencyDot = ({
 };
 
 /**
- * Renders a connected series with a wide invisible pointer target.
+ * Renders a keyboard-accessible connected model path.
  *
- * @param props - Recharts line geometry and model interaction state.
- * @returns Interactive SVG series line.
+ * @param props - Path geometry and interaction state.
+ * @returns Interactive SVG path group.
  */
-const EfficiencyLine = ({
+const ComparisonLine = ({
   activeModel,
   color,
   hoverConfig,
@@ -489,23 +407,17 @@ const EfficiencyLine = ({
   onLeave,
   onPin,
   points,
-}: EfficiencyLineProps): ReactElement => {
+}: ComparisonLineProps): ReactElement => {
   const path = (points ?? []).reduce<string>((result, point) => {
     const pointX = point.x ?? point.cx;
     const pointY = point.y ?? point.cy;
 
-    if (!Number.isFinite(pointX) || !Number.isFinite(pointY)) {
-      return result;
-    }
+    if (!Number.isFinite(pointX) || !Number.isFinite(pointY)) return result;
 
     return `${result}${result ? " L" : "M"} ${pointX} ${pointY}`;
   }, "");
 
-  if (!path) {
-    return <g />;
-  }
-
-  const lineColor = `color-mix(in oklab, ${color} 84%, var(--card))`;
+  if (!path) return <g />;
 
   return (
     <g
@@ -541,7 +453,7 @@ const EfficiencyLine = ({
         d={path}
         fill="none"
         pointerEvents="none"
-        stroke={lineColor}
+        stroke={`color-mix(in oklab, ${color} 84%, var(--card))`}
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2.5}
@@ -552,12 +464,12 @@ const EfficiencyLine = ({
 };
 
 /**
- * Renders a model name and its chosen reasoning-effort anchor.
+ * Renders a model label anchored to one configuration.
  *
- * @param props - Recharts label geometry and model interaction state.
- * @returns Interactive two-line SVG label.
+ * @param props - Label geometry and interaction state.
+ * @returns Interactive SVG label or null.
  */
-const EfficiencyLabel = ({
+const ComparisonLabel = ({
   activeModel,
   color,
   model,
@@ -568,7 +480,7 @@ const EfficiencyLabel = ({
   viewBox,
   x,
   y,
-}: EfficiencyLabelProps): ReactElement | null => {
+}: ComparisonLabelProps): ReactElement | null => {
   const anchorX =
     x ??
     (viewBox?.x === undefined
@@ -651,47 +563,22 @@ const EfficiencyLabel = ({
 };
 
 /**
- * Renders the stateful DeepSWE efficiency-chart content.
+ * Renders the stateful FrontierCode score-versus-cost chart.
  *
- * @param props - Filtered rows, metric state, and leaderboard metadata.
+ * @param props - Visible FrontierCode rows.
  * @returns Interactive connected scatter chart.
  */
-const DeepSweEfficiencyChartContent = ({
-  leaderboard,
-  metric,
+const FrontierCodeComparisonChartContent = ({
   rows,
-}: DeepSweEfficiencyChartContentProps): ReactElement => {
+}: FrontierCodeComparisonChartProps): ReactElement => {
   const [hoveredConfig, setHoveredConfig] = useState<string | null>(null);
   const [pinnedConfig, setPinnedConfig] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (pinnedConfig !== null) {
-      const handleEscape = (event: KeyboardEvent): void => {
-        if (event.key === "Escape") {
-          setHoveredConfig(null);
-          setPinnedConfig(null);
-        }
-      };
-
-      window.addEventListener("keydown", handleEscape);
-
-      return () => window.removeEventListener("keydown", handleEscape);
-    }
-
-    return undefined;
-  }, [pinnedConfig]);
-
-  const series = useMemo(() => createChartSeries(rows, metric), [metric, rows]);
-
-  const lastJobDate = formatLongDate(
-    leaderboard.latest_job?.finished_at ?? leaderboard.generated_at,
-  );
+  const series = useMemo(() => createChartSeries(rows), [rows]);
   const scoreMaximum = getScoreMaximum(series);
   const scoreTicks = createScoreTicks(scoreMaximum);
-  const metricAxis = getMetricAxis(series);
+  const costAxis = getCostAxis(series);
   const hoveredPoint = findChartPoint(series, hoveredConfig);
   const pinnedPoint = findChartPoint(series, pinnedConfig);
-  const visiblePinnedConfig = pinnedPoint?.config ?? null;
   const activePoint = pinnedPoint
     ? hoveredPoint?.model === pinnedPoint.model
       ? hoveredPoint
@@ -709,24 +596,35 @@ const DeepSweEfficiencyChartContent = ({
       )
     : series;
 
+  useEffect(() => {
+    if (pinnedConfig === null) return undefined;
+
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setHoveredConfig(null);
+        setPinnedConfig(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [pinnedConfig]);
+
   /**
-   * Focuses an exact chart configuration.
+   * Focuses a chart configuration.
    *
    * @param config - Configuration identifier.
    */
-  const handlePointHover = (config: string): void => {
-    setHoveredConfig(config);
-  };
+  const handlePointHover = (config: string): void => setHoveredConfig(config);
 
   /**
-   * Clears transient chart focus while preserving a pin.
+   * Clears temporary chart focus.
    */
-  const handlePointLeave = (): void => {
-    setHoveredConfig(null);
-  };
+  const handlePointLeave = (): void => setHoveredConfig(null);
 
   /**
-   * Toggles a persistent chart configuration selection.
+   * Toggles persistent focus for a chart configuration.
    *
    * @param config - Configuration identifier.
    */
@@ -736,54 +634,36 @@ const DeepSweEfficiencyChartContent = ({
   };
 
   /**
-   * Clears the persistent chart selection.
+   * Clears chart pinning.
    */
   const handleClearPin = (): void => {
     setHoveredConfig(null);
     setPinnedConfig(null);
   };
 
-  /**
-   * Formats the selected metric for the horizontal axis.
-   *
-   * @param value - Axis value.
-   * @returns Formatted tick.
-   */
-  const formatXAxisTick = (value: number): string =>
-    formatMetricTick(metric, value);
-
   return (
     <section
-      aria-labelledby="deep-swe-efficiency-title"
+      aria-labelledby="frontier-code-comparison-title"
       className="flex flex-col gap-3"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3
             className="text-lg leading-tight font-semibold tracking-tight"
-            id="deep-swe-efficiency-title"
+            id="frontier-code-comparison-title"
           >
-            Efficiency comparison
+            Score versus benchmark cost
           </h3>
           <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-6">
-            Compare benchmark score against cost, output tokens, or agent steps.
+            Higher scores and lower costs indicate stronger value.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {lastJobDate && (
-            <span className="text-muted-foreground hidden items-center gap-1 text-sm md:flex">
-              <span className="hidden lg:block">Last job executed on</span>
-              {lastJobDate}
-            </span>
-          )}
-
-          {pinnedPoint ? (
-            <Button onClick={handleClearPin} size="sm" variant="ghost">
-              Clear pinned
-            </Button>
-          ) : null}
-        </div>
+        {pinnedPoint ? (
+          <Button onClick={handleClearPin} size="sm" variant="ghost">
+            Clear pinned
+          </Button>
+        ) : null}
       </div>
 
       <div className="bg-card relative rounded-md border">
@@ -793,7 +673,7 @@ const DeepSweEfficiencyChartContent = ({
 
         {series.length === 0 ? (
           <div className="text-muted-foreground flex h-110 items-center justify-center px-6 text-center text-sm">
-            No data is available for the selected configurations and metric.
+            No data is available for the selected configurations.
           </div>
         ) : (
           <ChartContainer
@@ -802,12 +682,7 @@ const DeepSweEfficiencyChartContent = ({
           >
             <ScatterChart
               accessibilityLayer
-              margin={{
-                top: 56,
-                right: 76,
-                bottom: 52,
-                left: 20,
-              }}
+              margin={{ top: 56, right: 76, bottom: 52, left: 20 }}
               onClick={handleClearPin}
               onMouseLeave={handlePointLeave}
             >
@@ -821,17 +696,17 @@ const DeepSweEfficiencyChartContent = ({
 
               <XAxis
                 axisLine={false}
-                dataKey="metricValue"
-                domain={[0, metricAxis.maximum]}
+                dataKey="cost"
+                domain={[0, costAxis.maximum]}
                 interval="preserveStartEnd"
                 label={{
-                  value: getMetricAxisLabel(metric),
+                  value: "Benchmark cost",
                   position: "insideBottom",
                   offset: -30,
                 }}
                 reversed
-                ticks={metricAxis.ticks}
-                tickFormatter={formatXAxisTick}
+                ticks={costAxis.ticks}
+                tickFormatter={(value: number) => formatFrontierCodeCost(value)}
                 tickLine={false}
                 type="number"
               />
@@ -841,7 +716,7 @@ const DeepSweEfficiencyChartContent = ({
                 dataKey="score"
                 domain={[0, scoreMaximum]}
                 label={{
-                  value: "DeepSWE score",
+                  value: "Frontier score",
                   angle: 0,
                   position: "top",
                   offset: 22,
@@ -863,12 +738,12 @@ const DeepSweEfficiencyChartContent = ({
                       fontSize: 12,
                       fontWeight: 600,
                       position: "bottom",
-                      value: formatMetricTick(metric, activePoint.metricValue),
+                      value: formatFrontierCodeCost(activePoint.cost),
                     }}
                     stroke={activeColor}
                     strokeDasharray="4 4"
                     strokeOpacity={0.8}
-                    x={activePoint.metricValue}
+                    x={activePoint.cost}
                   />
                   <ReferenceLine
                     ifOverflow="visible"
@@ -894,7 +769,7 @@ const DeepSweEfficiencyChartContent = ({
                   isAnimationActive={false}
                   key={item.model}
                   line={
-                    <EfficiencyLine
+                    <ComparisonLine
                       activeModel={activeModel}
                       color={item.color}
                       hoverConfig={item.labelConfig}
@@ -907,16 +782,15 @@ const DeepSweEfficiencyChartContent = ({
                   lineType="joint"
                   name={item.model}
                   shape={(shapeProps: unknown) => (
-                    <EfficiencyDot
+                    <ComparisonDot
                       {...(shapeProps as ScatterShapeProps)}
                       activeConfig={activePoint?.config ?? null}
                       activeModel={activeModel}
                       color={item.color}
-                      metric={metric}
                       onHover={handlePointHover}
                       onLeave={handlePointLeave}
                       onPin={handlePointPin}
-                      pinnedConfig={visiblePinnedConfig}
+                      pinnedConfig={pinnedPoint?.config ?? null}
                     />
                   )}
                 >
@@ -929,7 +803,7 @@ const DeepSweEfficiencyChartContent = ({
                           : item.points[resolvedProps.index];
 
                       return (
-                        <EfficiencyLabel
+                        <ComparisonLabel
                           {...resolvedProps}
                           activeModel={activeModel}
                           color={item.color}
@@ -961,27 +835,17 @@ const DeepSweEfficiencyChartContent = ({
 };
 
 /**
- * Renders the DeepSWE efficiency chart.
+ * Renders the FrontierCode score-versus-cost chart.
  *
- * The stateful content is keyed by benchmark version and metric so changes
- * reset chart focus. The parent dashboard owns configuration filtering and
- * metric selection.
+ * The chart maps score to the vertical axis and benchmark cost to the
+ * horizontal axis, with the most efficient configurations toward the upper
+ * right of the chart.
  *
- * @param props - Filtered leaderboard rows, metadata, and benchmark version.
- * @returns Interactive connected scatter chart.
+ * @param props - Visible FrontierCode rows.
+ * @returns Interactive FrontierCode comparison visualization.
  */
-export const DeepSweEfficiencyChart = ({
-  leaderboard,
-  metric,
+export const FrontierCodeComparisonChart = ({
   rows,
-  version,
-}: DeepSweEfficiencyChartProps): ReactElement => {
-  return (
-    <DeepSweEfficiencyChartContent
-      key={`${version}-${metric}`}
-      leaderboard={leaderboard}
-      metric={metric}
-      rows={rows}
-    />
-  );
-};
+}: FrontierCodeComparisonChartProps): ReactElement => (
+  <FrontierCodeComparisonChartContent rows={rows} />
+);

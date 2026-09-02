@@ -9,11 +9,6 @@ export type FrontierCodeVersion = "v1.1" | "v1";
 export type FrontierCodeSubset = "main" | "extended";
 
 /**
- * Horizontal metric used by the FrontierCode efficiency chart.
- */
-export type FrontierCodeEfficiencyMetric = "cost" | "outputTokens";
-
-/**
  * Detail level used by the FrontierCode performance ranking.
  */
 export type FrontierCodeRankingMode = "best" | "all";
@@ -21,7 +16,7 @@ export type FrontierCodeRankingMode = "best" | "all";
 /**
  * Metric used to order FrontierCode ranking rows.
  */
-export type FrontierCodeRankingMetric = "performance" | "costEfficiency";
+export type FrontierCodeRankingMetric = "score" | "costEfficiency";
 
 /**
  * One raw FrontierCode result for a model, effort, and task subset.
@@ -30,7 +25,7 @@ export interface FrontierCodeResult {
   correct: number;
   new_score: number;
   cost: number;
-  tokens: number;
+  tokens?: number;
   flagged_rate?: number | null;
 }
 
@@ -67,8 +62,7 @@ export interface FrontierCodeLeaderboardRow {
   reasoning_effort: string;
   config: string;
   score: number;
-  correctness: number;
+  pass_rate: number;
   cost: number;
-  tokens: number;
   flagged_rate: number | null;
 }

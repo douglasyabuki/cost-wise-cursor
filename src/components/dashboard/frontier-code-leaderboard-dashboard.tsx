@@ -22,34 +22,39 @@ import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { CursorModelPrice } from "@/types-and-constants/cursor";
 import type {
-  DeepSweLeaderboard,
-  DeepSweLeaderboardRow,
-  DeepSweVersion,
-  EfficiencyMetric,
-} from "@/types-and-constants/deep-swe";
+  FrontierCodeLeaderboard,
+  FrontierCodeLeaderboardRow,
+  FrontierCodeSubset,
+  FrontierCodeVersion,
+} from "@/types-and-constants/frontier-code";
 import {
   type CursorMatchedRow,
   matchLeaderboardRows,
 } from "@/utils/cursor-model-match";
 import {
-  compareModelNames,
-  getReasoningEffort,
-  getReasoningEffortOrder,
-} from "@/utils/deep-swe";
+  compareFrontierCodeModelNames,
+  getFrontierCodeReasoningEffortOrder,
+  getFrontierCodeRows,
+} from "@/utils/frontier-code";
 
-import { DeepSweEfficiencyChart } from "./charts/deep-swe-efficiency-chart";
-import { DeepSwePerformanceRankingChart } from "./charts/deep-swe-performance-ranking-chart";
+import { FrontierCodeComparisonChart } from "./charts/frontier-code-efficiency-chart";
+import { FrontierCodePerformanceRankingChart } from "./charts/frontier-code-performance-ranking-chart";
 
-export interface DeepSweLeaderboardDashboardProps {
+/**
+ * Public properties for the FrontierCode dashboard.
+ */
+export interface FrontierCodeLeaderboardDashboardProps {
   cursorModelPrices?: readonly CursorModelPrice[];
-  leaderboard: DeepSweLeaderboard;
-  version: DeepSweVersion;
-  onVersionChange: (version: DeepSweVersion) => void;
+  leaderboard: FrontierCodeLeaderboard;
+  version: FrontierCodeVersion;
+  subset: FrontierCodeSubset;
+  onVersionChange: (version: FrontierCodeVersion) => void;
+  onSubsetChange: (subset: FrontierCodeSubset) => void;
 }
 
 interface ConfigModelGroup {
   model: string;
-  rows: DeepSweLeaderboardRow[];
+  rows: FrontierCodeLeaderboardRow[];
 }
 
 interface ToggleFilterOption<T extends string> {
@@ -88,34 +93,31 @@ interface CursorFilterConfigs {
   cursorMaxMatchedCount: number;
 }
 
+const EMPTY_EXCLUDED_CONFIGS: ReadonlySet<string> = new Set();
+
 const VERSION_OPTIONS = [
   { label: "v1.1", value: "v1.1" },
   { label: "v1", value: "v1" },
-] as const satisfies readonly ToggleFilterOption<DeepSweVersion>[];
+] as const satisfies readonly ToggleFilterOption<FrontierCodeVersion>[];
 
-const EFFICIENCY_METRIC_OPTIONS = [
-  { label: "Cost", value: "cost" },
-  { label: "Output tokens", value: "outputTokens" },
-  { label: "Agent steps", value: "agentSteps" },
-] as const satisfies readonly ToggleFilterOption<EfficiencyMetric>[];
+const SUBSET_OPTIONS = [
+  { label: "Main (100)", value: "main" },
+  { label: "Extended (150)", value: "extended" },
+] as const satisfies readonly ToggleFilterOption<FrontierCodeSubset>[];
 
 /**
- * Groups configurations by model for the shared filter.
+ * Groups FrontierCode configurations by model for the shared filter.
  *
- * Model names use natural alphabetical ordering. Reasoning levels retain their
- * semantic order.
- *
- * @param rows - Available leaderboard configurations.
- * @returns Alphabetized model groups.
+ * @param rows - Available configurations.
+ * @returns Alphabetized model groups with semantic effort ordering.
  */
 const groupRowsByModel = (
-  rows: readonly DeepSweLeaderboardRow[],
+  rows: readonly FrontierCodeLeaderboardRow[],
 ): ConfigModelGroup[] => {
-  const rowsByModel = new Map<string, DeepSweLeaderboardRow[]>();
+  const rowsByModel = new Map<string, FrontierCodeLeaderboardRow[]>();
 
   rows.forEach((row) => {
     const modelRows = rowsByModel.get(row.model) ?? [];
-
     modelRows.push(row);
     rowsByModel.set(row.model, modelRows);
   });
@@ -123,28 +125,29 @@ const groupRowsByModel = (
   return [...rowsByModel.entries()]
     .map(([model, modelRows]) => ({
       model,
-      rows: [...modelRows].sort((first, second) => {
-        const firstEffort = getReasoningEffort(first);
-        const secondEffort = getReasoningEffort(second);
-
-        return (
-          getReasoningEffortOrder(firstEffort) -
-            getReasoningEffortOrder(secondEffort) ||
-          firstEffort.localeCompare(secondEffort)
-        );
-      }),
+      rows: [...modelRows].sort(
+        (first, second) =>
+          getFrontierCodeReasoningEffortOrder(first.reasoning_effort) -
+            getFrontierCodeReasoningEffortOrder(second.reasoning_effort) ||
+          first.reasoning_effort.localeCompare(second.reasoning_effort),
+      ),
     }))
-    .sort((first, second) => compareModelNames(first.model, second.model));
+    .sort((first, second) =>
+      compareFrontierCodeModelNames(first.model, second.model),
+    );
 };
 
 /**
- * Builds the two Cursor availability presets.
+ * Builds the Cursor availability presets for FrontierCode rows.
  *
- * @param rows - Leaderboard rows enriched with Cursor matches.
- * @returns Configuration identifiers and enabled-state counts.
+ * @param rows - FrontierCode rows enriched with Cursor matches.
+ * @returns Preset configuration identifiers and model counts.
  */
 const createCursorFilterConfigs = (
-  rows: readonly CursorMatchedRow<DeepSweLeaderboardRow, CursorModelPrice>[],
+  rows: readonly CursorMatchedRow<
+    FrontierCodeLeaderboardRow,
+    CursorModelPrice
+  >[],
 ): CursorFilterConfigs => {
   const cursorConfigs = new Set<string>();
   const cursorMaxIncludedConfigs = new Set<string>();
@@ -152,9 +155,7 @@ const createCursorFilterConfigs = (
   const cursorMaxModels = new Set<string>();
 
   rows.forEach((row) => {
-    if (row.cursorMatch === null) {
-      return;
-    }
+    if (row.cursorMatch === null) return;
 
     cursorMaxIncludedConfigs.add(row.config);
 
@@ -210,7 +211,10 @@ const ToggleFilter = <T extends string>({
 );
 
 /**
- * Renders the configuration selector shared by both leaderboard views.
+ * Renders the FrontierCode model and effort configuration selector.
+ *
+ * @param props - Model groups, selection state, and Cursor presets.
+ * @returns Configuration filter menu.
  */
 const ConfigFilter = ({
   cursorMatchedCount,
@@ -258,7 +262,6 @@ const ConfigFilter = ({
 
         <DropdownMenuGroup>
           <DropdownMenuLabel>Cursor availability</DropdownMenuLabel>
-
           <div className="grid gap-2 px-2 pb-2">
             <Button
               aria-label={`Select ${cursorMatchedCount} Cursor models that do not require legacy Max Mode`}
@@ -270,7 +273,6 @@ const ConfigFilter = ({
             >
               Cursor models
             </Button>
-
             <Button
               aria-label={`Select Cursor models, including ${cursorMaxMatchedCount} that require legacy Max Mode`}
               disabled={cursorMaxMatchedCount === 0}
@@ -289,22 +291,21 @@ const ConfigFilter = ({
 
         <DropdownMenuGroup>
           <DropdownMenuLabel>Models</DropdownMenuLabel>
-
           <div className="px-2 pb-2">
             <InputGroup>
               <InputGroupInput
                 aria-label="Search models"
-                onKeyDown={(e) => {
+                onKeyDown={(event) => {
                   if (
-                    e.key.length === 1 &&
-                    !e.ctrlKey &&
-                    !e.metaKey &&
-                    !e.altKey
+                    event.key.length === 1 &&
+                    !event.ctrlKey &&
+                    !event.metaKey &&
+                    !event.altKey
                   ) {
-                    e.stopPropagation();
+                    event.stopPropagation();
                   }
                 }}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search models..."
                 type="text"
                 value={searchQuery}
@@ -314,8 +315,8 @@ const ConfigFilter = ({
               </InputGroupAddon>
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
-                  onClick={() => setSearchQuery("")}
                   className={searchQuery.length > 0 ? "flex" : "hidden"}
+                  onClick={() => setSearchQuery("")}
                 >
                   <X />
                 </InputGroupButton>
@@ -348,21 +349,19 @@ const ConfigFilter = ({
                     <Checkbox
                       aria-label={`Select all ${modelGroup.model} levels`}
                       checked={selectedLevelCount === totalLevelCount}
+                      id={`frontier-code-${modelGroup.model}`}
                       indeterminate={
                         selectedLevelCount > 0 &&
                         selectedLevelCount < totalLevelCount
                       }
                       onCheckedChange={() => onToggleModel(configIds)}
-                      id={modelGroup.model}
                     />
-
                     <Label
                       className="min-w-0 flex-1 truncate font-medium"
-                      htmlFor={modelGroup.model}
+                      htmlFor={`frontier-code-${modelGroup.model}`}
                     >
                       {modelGroup.model}
                     </Label>
-
                     <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                       {selectedLevelCount}/{totalLevelCount}
                     </span>
@@ -371,39 +370,27 @@ const ConfigFilter = ({
                   <ToggleGroup
                     aria-label={`${modelGroup.model} reasoning levels`}
                     className="ml-6 max-w-full flex-wrap"
+                    multiple
                     onValueChange={(values) =>
                       onToggleLevels(configIds, new Set(values))
                     }
                     size="sm"
                     spacing={0}
                     value={selectedLevelIds}
-                    multiple
                     variant="outline"
                   >
-                    {modelGroup.rows.map((row) => {
-                      const effort = getReasoningEffort(row);
-
-                      return (
-                        <ToggleGroupItem
-                          aria-label={`${modelGroup.model} ${effort} reasoning level`}
-                          key={row.config}
-                          pressed={selectedLevelIds.includes(row.config)}
-                          size="sm"
-                          title={[
-                            effort.toUpperCase(),
-                            row.mean_cost_usd === null
-                              ? null
-                              : `$${row.mean_cost_usd.toFixed(2)}`,
-                            `${(row.pass_at_1 * 100).toFixed(0)}%`,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                          value={row.config}
-                        >
-                          {effort}
-                        </ToggleGroupItem>
-                      );
-                    })}
+                    {modelGroup.rows.map((row) => (
+                      <ToggleGroupItem
+                        aria-label={`${modelGroup.model} ${row.reasoning_effort} reasoning level`}
+                        key={row.config}
+                        pressed={selectedLevelIds.includes(row.config)}
+                        size="sm"
+                        title={`${row.reasoning_effort.toUpperCase()} · score ${(row.score * 100).toFixed(1)}% · pass rate ${(row.pass_rate * 100).toFixed(1)}%`}
+                        value={row.config}
+                      >
+                        {row.reasoning_effort}
+                      </ToggleGroupItem>
+                    ))}
                   </ToggleGroup>
                 </DropdownMenuItem>
               );
@@ -416,44 +403,51 @@ const ConfigFilter = ({
 };
 
 /**
- * Coordinates shared configuration filters for both leaderboard views.
+ * Renders the FrontierCode dashboard for a selected version and subset.
+ *
+ * Configuration selection is kept independently for every version/subset
+ * combination. The charts share the resulting filtered rows.
+ *
+ * @param props - FrontierCode data, controls, and Cursor pricing records.
+ * @returns FrontierCode controls and visualizations.
  */
-export const DeepSweLeaderboardDashboard = ({
+export const FrontierCodeLeaderboardDashboard = ({
   cursorModelPrices,
   leaderboard,
-  version,
+  onSubsetChange,
   onVersionChange,
-}: DeepSweLeaderboardDashboardProps): ReactElement => {
-  const [metric, setMetric] = useState<EfficiencyMetric>("cost");
+  subset,
+  version,
+}: FrontierCodeLeaderboardDashboardProps): ReactElement => {
+  const rows = useMemo(
+    () => getFrontierCodeRows(leaderboard, version, subset),
+    [leaderboard, subset, version],
+  );
   const matchedRows = useMemo(
     () =>
       matchLeaderboardRows(
-        leaderboard.rows,
+        rows,
         cursorModelPrices ?? [],
         (cursorModel) => cursorModel.model,
       ),
-    [cursorModelPrices, leaderboard.rows],
+    [cursorModelPrices, rows],
   );
-
   const cursorFilterConfigs = useMemo(
     () => createCursorFilterConfigs(matchedRows),
     [matchedRows],
   );
+  const configModels = useMemo(() => groupRowsByModel(rows), [rows]);
 
-  const configModels = useMemo(
-    () => groupRowsByModel(matchedRows),
-    [matchedRows],
-  );
-
-  const [excludedConfigsByVersion, setExcludedConfigsByVersion] = useState<
-    Partial<Record<DeepSweVersion, Set<string>>>
+  const [excludedConfigsBySelection, setExcludedConfigsBySelection] = useState<
+    Partial<
+      Record<
+        FrontierCodeVersion,
+        Partial<Record<FrontierCodeSubset, Set<string>>>
+      >
+    >
   >({});
-
-  const excludedConfigs = useMemo(
-    () => excludedConfigsByVersion[version] ?? new Set(),
-    [excludedConfigsByVersion, version],
-  );
-
+  const excludedConfigs =
+    excludedConfigsBySelection[version]?.[subset] ?? EMPTY_EXCLUDED_CONFIGS;
   const selectedConfigs = useMemo(
     () =>
       new Set(
@@ -463,26 +457,32 @@ export const DeepSweLeaderboardDashboard = ({
       ),
     [excludedConfigs, matchedRows],
   );
-
   const selectedRows = useMemo(
     () => matchedRows.filter((row) => selectedConfigs.has(row.config)),
     [matchedRows, selectedConfigs],
   );
 
   /**
-   * Updates the excluded configurations for the active benchmark version.
+   * Updates excluded configurations for the active version/subset.
+   *
+   * @param update - State transformation for the current exclusion set.
    */
   const updateExcludedConfigs = (
     update: (current: ReadonlySet<string>) => Set<string>,
   ): void => {
-    setExcludedConfigsByVersion((current) => ({
+    setExcludedConfigsBySelection((current) => ({
       ...current,
-      [version]: update(current[version] ?? new Set()),
+      [version]: {
+        ...current[version],
+        [subset]: update(current[version]?.[subset] ?? EMPTY_EXCLUDED_CONFIGS),
+      },
     }));
   };
 
   /**
-   * Selects or hides every reasoning level belonging to a model.
+   * Selects or hides every effort belonging to a model.
+   *
+   * @param configs - Configuration ids belonging to the model.
    */
   const handleModelToggle = (configs: readonly string[]): void => {
     const shouldShowAll = configs.some(
@@ -491,21 +491,19 @@ export const DeepSweLeaderboardDashboard = ({
 
     updateExcludedConfigs((current) => {
       const next = new Set(current);
-
       configs.forEach((config) => {
-        if (shouldShowAll) {
-          next.delete(config);
-        } else {
-          next.add(config);
-        }
+        if (shouldShowAll) next.delete(config);
+        else next.add(config);
       });
-
       return next;
     });
   };
 
   /**
-   * Applies an exact reasoning-level selection to one model.
+   * Applies an exact effort-level selection to one model.
+   *
+   * @param configs - All configuration ids belonging to the model.
+   * @param nextSelectedConfigs - Configuration ids that should be selected.
    */
   const handleLevelsToggle = (
     configs: readonly string[],
@@ -513,21 +511,18 @@ export const DeepSweLeaderboardDashboard = ({
   ): void => {
     updateExcludedConfigs((current) => {
       const next = new Set(current);
-
       configs.forEach((config) => {
-        if (nextSelectedConfigs.has(config)) {
-          next.delete(config);
-        } else {
-          next.add(config);
-        }
+        if (nextSelectedConfigs.has(config)) next.delete(config);
+        else next.add(config);
       });
-
       return next;
     });
   };
 
   /**
    * Replaces the active selection with an exact set of configurations.
+   *
+   * @param configs - Configuration ids to select.
    */
   const handleSelectConfigs = (configs: ReadonlySet<string>): void => {
     updateExcludedConfigs(
@@ -541,14 +536,14 @@ export const DeepSweLeaderboardDashboard = ({
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <div className="grid gap-1.5">
           <span className="text-muted-foreground text-xs font-medium">
             Version
           </span>
           <ToggleFilter
-            label="Benchmark version"
+            label="FrontierCode version"
             onChange={onVersionChange}
             options={VERSION_OPTIONS}
             value={version}
@@ -557,13 +552,13 @@ export const DeepSweLeaderboardDashboard = ({
 
         <div className="grid gap-1.5">
           <span className="text-muted-foreground text-xs font-medium">
-            Metric
+            Subset
           </span>
           <ToggleFilter
-            label="Efficiency metric"
-            onChange={setMetric}
-            options={EFFICIENCY_METRIC_OPTIONS}
-            value={metric}
+            label="FrontierCode subset"
+            onChange={onSubsetChange}
+            options={SUBSET_OPTIONS}
+            value={subset}
           />
         </div>
 
@@ -590,14 +585,14 @@ export const DeepSweLeaderboardDashboard = ({
         </div>
       </div>
 
-      <DeepSweEfficiencyChart
-        leaderboard={leaderboard}
-        metric={metric}
+      <FrontierCodeComparisonChart
+        key={`${version}-${subset}-comparison`}
         rows={selectedRows}
-        version={version}
       />
-
-      <DeepSwePerformanceRankingChart rows={selectedRows} />
+      <FrontierCodePerformanceRankingChart
+        key={`${version}-${subset}-ranking`}
+        rows={selectedRows}
+      />
     </div>
   );
 };
