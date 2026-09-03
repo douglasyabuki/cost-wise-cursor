@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import type { FrontierCodeLeaderboardRow } from "@/types-and-constants/frontier-code";
+import { getNearestLineConfig, type ScatterLinePoint } from "@/utils/chart";
 import { getModelColor } from "@/utils/deep-swe";
 import {
   formatFrontierCodeCost,
@@ -57,13 +58,6 @@ interface ScatterShapeProps {
   payload?: ChartPoint;
 }
 
-interface ScatterLinePoint {
-  cx?: number;
-  cy?: number;
-  x?: number;
-  y?: number;
-}
-
 interface ScatterLineProps {
   points?: ScatterLinePoint[];
 }
@@ -81,7 +75,8 @@ interface ComparisonDotProps extends ScatterShapeProps {
 interface ComparisonLineProps extends ScatterLineProps {
   activeModel: string | null;
   color: string;
-  hoverConfig: string;
+  configurations: readonly ChartPoint[];
+  fallbackConfig: string;
   model: string;
   onHover: (config: string) => void;
   onLeave: () => void;
@@ -401,7 +396,8 @@ const ComparisonDot = ({
 const ComparisonLine = ({
   activeModel,
   color,
-  hoverConfig,
+  configurations,
+  fallbackConfig,
   model,
   onHover,
   onLeave,
@@ -419,23 +415,42 @@ const ComparisonLine = ({
 
   if (!path) return <g />;
 
+  /**
+   * Updates the focused configuration as the pointer moves along the line.
+   */
+  const handleLineHover = (event: ReactMouseEvent<SVGGElement>): void => {
+    onHover(
+      getNearestLineConfig(event, points, configurations, fallbackConfig),
+    );
+  };
+
   return (
     <g
       aria-label={`Inspect ${model}`}
       onBlur={onLeave}
       onClick={(event: ReactMouseEvent<SVGGElement>) => {
         event.stopPropagation();
-        onPin(hoverConfig);
+        onPin(
+          event.detail === 0
+            ? fallbackConfig
+            : getNearestLineConfig(
+                event,
+                points,
+                configurations,
+                fallbackConfig,
+              ),
+        );
       }}
-      onFocus={() => onHover(hoverConfig)}
+      onFocus={() => onHover(fallbackConfig)}
       onKeyDown={(event: ReactKeyboardEvent<SVGGElement>) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onPin(hoverConfig);
+          onPin(fallbackConfig);
         }
       }}
-      onMouseEnter={() => onHover(hoverConfig)}
+      onMouseEnter={handleLineHover}
       onMouseLeave={onLeave}
+      onMouseMove={handleLineHover}
       role="button"
       style={{ cursor: "pointer", outline: "none" }}
       tabIndex={0}
@@ -772,7 +787,8 @@ const FrontierCodeComparisonChartContent = ({
                     <ComparisonLine
                       activeModel={activeModel}
                       color={item.color}
-                      hoverConfig={item.labelConfig}
+                      configurations={item.points}
+                      fallbackConfig={item.labelConfig}
                       model={item.model}
                       onHover={handlePointHover}
                       onLeave={handlePointLeave}

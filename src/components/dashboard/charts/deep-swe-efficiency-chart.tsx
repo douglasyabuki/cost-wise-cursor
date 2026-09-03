@@ -27,6 +27,7 @@ import type {
   DeepSweVersion,
   EfficiencyMetric,
 } from "@/types-and-constants/deep-swe";
+import { getNearestLineConfig, type ScatterLinePoint } from "@/utils/chart";
 import { formatLongDate } from "@/utils/date";
 import {
   formatMetricTick,
@@ -78,13 +79,6 @@ interface ScatterShapeProps {
   payload?: ChartPoint;
 }
 
-interface ScatterLinePoint {
-  cx?: number;
-  cy?: number;
-  x?: number;
-  y?: number;
-}
-
 interface ScatterLineProps {
   points?: ScatterLinePoint[];
 }
@@ -103,7 +97,8 @@ interface EfficiencyDotProps extends ScatterShapeProps {
 interface EfficiencyLineProps extends ScatterLineProps {
   activeModel: string | null;
   color: string;
-  hoverConfig: string;
+  configurations: readonly ChartPoint[];
+  fallbackConfig: string;
   model: string;
   onHover: (config: string) => void;
   onLeave: () => void;
@@ -483,7 +478,8 @@ const EfficiencyDot = ({
 const EfficiencyLine = ({
   activeModel,
   color,
-  hoverConfig,
+  configurations,
+  fallbackConfig,
   model,
   onHover,
   onLeave,
@@ -507,23 +503,42 @@ const EfficiencyLine = ({
 
   const lineColor = `color-mix(in oklab, ${color} 84%, var(--card))`;
 
+  /**
+   * Updates the focused configuration as the pointer moves along the line.
+   */
+  const handleLineHover = (event: ReactMouseEvent<SVGGElement>): void => {
+    onHover(
+      getNearestLineConfig(event, points, configurations, fallbackConfig),
+    );
+  };
+
   return (
     <g
       aria-label={`Inspect ${model}`}
       onBlur={onLeave}
       onClick={(event: ReactMouseEvent<SVGGElement>) => {
         event.stopPropagation();
-        onPin(hoverConfig);
+        onPin(
+          event.detail === 0
+            ? fallbackConfig
+            : getNearestLineConfig(
+                event,
+                points,
+                configurations,
+                fallbackConfig,
+              ),
+        );
       }}
-      onFocus={() => onHover(hoverConfig)}
+      onFocus={() => onHover(fallbackConfig)}
       onKeyDown={(event: ReactKeyboardEvent<SVGGElement>) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onPin(hoverConfig);
+          onPin(fallbackConfig);
         }
       }}
-      onMouseEnter={() => onHover(hoverConfig)}
+      onMouseEnter={handleLineHover}
       onMouseLeave={onLeave}
+      onMouseMove={handleLineHover}
       role="button"
       style={{ cursor: "pointer", outline: "none" }}
       tabIndex={0}
@@ -897,7 +912,8 @@ const DeepSweEfficiencyChartContent = ({
                     <EfficiencyLine
                       activeModel={activeModel}
                       color={item.color}
-                      hoverConfig={item.labelConfig}
+                      configurations={item.points}
+                      fallbackConfig={item.labelConfig}
                       model={item.model}
                       onHover={handlePointHover}
                       onLeave={handlePointLeave}
