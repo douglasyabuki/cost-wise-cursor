@@ -1,6 +1,6 @@
 # Cost Wise Cursor
 
-This application helps Cursor users compare AI models by coding performance and cost efficiency.
+This application helps Cursor users compare available AI models across coding benchmarks, including performance and cost efficiency.
 
 The app combines DeepSWE and FrontierCode benchmark results with Cursor's model
 catalog and pricing documentation. This makes it easier to answer questions

@@ -147,8 +147,8 @@ export const HomePage = () => {
             Cost Wise Cursor
           </h1>
           <p className="text-muted-foreground mt-2 text-sm leading-6 sm:text-base">
-            Compare coding agents by the work they complete and the Cursor cost
-            behind it.
+            Compare models available in Cursor across coding benchmarks, with
+            performance, cost efficiency, and reasoning effort side by side.
           </p>
         </div>
       </div>
