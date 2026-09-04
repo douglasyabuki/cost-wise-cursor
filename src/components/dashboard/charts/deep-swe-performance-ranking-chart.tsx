@@ -518,8 +518,8 @@ const ScoreAxis = ({ maximum, ticks }: ScoreAxisProps): ReactElement => (
  * @returns Interactive performance ranking chart.
  */
 export const DeepSwePerformanceRankingChart = ({
-  rows,
   onConfigSelect,
+  rows,
 }: DeepSwePerformanceRankingChartProps): ReactElement => {
   const modelGroups = useMemo(() => groupRowsByModel(rows), [rows]);
 

@@ -1,6 +1,8 @@
 import { ChevronDown, SearchIcon, X } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
+import { ModelEfficiencyToggle } from "@/components/dashboard/model-efficiency-toggle";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -36,6 +38,10 @@ import {
   getFrontierCodeReasoningEffortOrder,
   getFrontierCodeRows,
 } from "@/utils/frontier-code";
+import {
+  getLessEfficientConfigIds,
+  type ModelEfficiencyCandidate,
+} from "@/utils/model-efficiency";
 
 import { FrontierCodeComparisonChart } from "./charts/frontier-code-efficiency-chart";
 import { FrontierCodePerformanceRankingChart } from "./charts/frontier-code-performance-ranking-chart";
@@ -72,6 +78,7 @@ interface ToggleFilterProps<T extends string> {
 interface ConfigFilterProps {
   cursorMatchedCount: number;
   cursorMaxMatchedCount: number;
+  hiddenConfigIds: ReadonlySet<string>;
   models: ConfigModelGroup[];
   selectedConfigs: ReadonlySet<string>;
   totalCount: number;
@@ -219,6 +226,7 @@ const ToggleFilter = <T extends string>({
 const ConfigFilter = ({
   cursorMatchedCount,
   cursorMaxMatchedCount,
+  hiddenConfigIds,
   models,
   selectedConfigs,
   totalCount,
@@ -338,6 +346,9 @@ const ConfigFilter = ({
               );
               const selectedLevelCount = selectedLevelIds.length;
               const totalLevelCount = modelGroup.rows.length;
+              const hiddenLevelCount = modelGroup.rows.filter((row) =>
+                hiddenConfigIds.has(row.config),
+              ).length;
 
               return (
                 <DropdownMenuItem
@@ -362,6 +373,14 @@ const ConfigFilter = ({
                     >
                       {modelGroup.model}
                     </Label>
+
+                    {hiddenLevelCount > 0 && (
+                      <Badge className="shrink-0" variant="secondary">
+                        {hiddenLevelCount} level
+                        {hiddenLevelCount === 1 ? "" : "s"} hidden
+                      </Badge>
+                    )}
+
                     <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                       {selectedLevelCount}/{totalLevelCount}
                     </span>
@@ -461,6 +480,40 @@ export const FrontierCodeLeaderboardDashboard = ({
     () => matchedRows.filter((row) => selectedConfigs.has(row.config)),
     [matchedRows, selectedConfigs],
   );
+  const selectedModelCount = useMemo(
+    () => new Set(selectedRows.map((row) => row.model)).size,
+    [selectedRows],
+  );
+
+  const [
+    showMoreEfficientOnlyBySelection,
+    setShowMoreEfficientOnlyBySelection,
+  ] = useState<
+    Partial<
+      Record<FrontierCodeVersion, Partial<Record<FrontierCodeSubset, boolean>>>
+    >
+  >({});
+  const showMoreEfficientOnly =
+    showMoreEfficientOnlyBySelection[version]?.[subset] ?? false;
+  const hiddenConfigIds = useMemo(() => {
+    if (!showMoreEfficientOnly) {
+      return new Set<string>();
+    }
+
+    const candidates: ModelEfficiencyCandidate[] = selectedRows.map((row) => ({
+      config: row.config,
+      model: row.model,
+      score: row.score,
+      cost: row.cost,
+    }));
+
+    return getLessEfficientConfigIds(candidates);
+  }, [selectedRows, showMoreEfficientOnly]);
+  const visibleRows = useMemo(
+    () => selectedRows.filter((row) => !hiddenConfigIds.has(row.config)),
+    [hiddenConfigIds, selectedRows],
+  );
+  const hiddenConfigKey = [...hiddenConfigIds].sort().join("|");
 
   /**
    * Updates excluded configurations for the active version/subset.
@@ -535,6 +588,23 @@ export const FrontierCodeLeaderboardDashboard = ({
     );
   };
 
+  /**
+   * Updates whether the charts show only more efficient models.
+   *
+   * @param nextShowMoreEfficientOnly - Whether to show only more efficient models.
+   */
+  const handleMoreEfficientOnlyChange = (
+    nextShowMoreEfficientOnly: boolean,
+  ): void => {
+    setShowMoreEfficientOnlyBySelection((current) => ({
+      ...current,
+      [version]: {
+        ...current[version],
+        [subset]: nextShowMoreEfficientOnly,
+      },
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
@@ -562,10 +632,18 @@ export const FrontierCodeLeaderboardDashboard = ({
           />
         </div>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <ModelEfficiencyToggle
+            hiddenConfigurationCount={hiddenConfigIds.size}
+            modelCount={selectedModelCount}
+            onShowMoreEfficientOnlyChange={handleMoreEfficientOnlyChange}
+            showMoreEfficientOnly={showMoreEfficientOnly}
+          />
+
           <ConfigFilter
             cursorMatchedCount={cursorFilterConfigs.cursorMatchedCount}
             cursorMaxMatchedCount={cursorFilterConfigs.cursorMaxMatchedCount}
+            hiddenConfigIds={hiddenConfigIds}
             models={configModels}
             onHideAll={() => handleSelectConfigs(new Set())}
             onSelectCursorModels={() =>
@@ -586,12 +664,14 @@ export const FrontierCodeLeaderboardDashboard = ({
       </div>
 
       <FrontierCodeComparisonChart
-        key={`${version}-${subset}-comparison`}
-        rows={selectedRows}
+        key={`${version}-${subset}-comparison-${hiddenConfigKey}`}
+        rows={visibleRows}
+        showAllPointLabels={showMoreEfficientOnly}
+        showModelLines={!showMoreEfficientOnly}
       />
       <FrontierCodePerformanceRankingChart
-        key={`${version}-${subset}-ranking`}
-        rows={selectedRows}
+        key={`${version}-${subset}-ranking-${hiddenConfigKey}`}
+        rows={visibleRows}
       />
     </div>
   );

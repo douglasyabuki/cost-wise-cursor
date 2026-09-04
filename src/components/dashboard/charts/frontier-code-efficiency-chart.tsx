@@ -21,7 +21,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import type { FrontierCodeLeaderboardRow } from "@/types-and-constants/frontier-code";
-import { getNearestLineConfig, type ScatterLinePoint } from "@/utils/chart";
+import {
+  formatChartPercentage,
+  formatCostAxisTick,
+  getNearestLineConfig,
+  type ScatterLinePoint,
+} from "@/utils/chart";
 import { getModelColor } from "@/utils/deep-swe";
 import {
   formatFrontierCodeCost,
@@ -33,6 +38,10 @@ import {
  */
 export interface FrontierCodeComparisonChartProps {
   rows: readonly FrontierCodeLeaderboardRow[];
+  /** Whether every visible point should display its model and effort labels. */
+  showAllPointLabels: boolean;
+  /** Whether connected model lines should be rendered. */
+  showModelLines: boolean;
 }
 
 interface ChartPoint {
@@ -67,6 +76,7 @@ interface ComparisonDotProps extends ScatterShapeProps {
   activeModel: string | null;
   color: string;
   pinnedConfig: string | null;
+  showAllPointLabels: boolean;
   onHover: (config: string) => void;
   onLeave: () => void;
   onPin: (config: string) => void;
@@ -100,6 +110,7 @@ interface ComparisonLabelProps extends LabelContentProps {
   activeModel: string | null;
   color: string;
   model: string;
+  showAllPointLabels: boolean;
   onHover: (config: string) => void;
   onLeave: () => void;
   onPin: (config: string) => void;
@@ -125,6 +136,7 @@ const chartConfig = {
  */
 const createChartSeries = (
   rows: readonly FrontierCodeLeaderboardRow[],
+  showAllPointLabels: boolean,
 ): ChartSeries[] => {
   const groupedPoints = new Map<string, ChartPoint[]>();
 
@@ -166,7 +178,10 @@ const createChartSeries = (
         points: points.map((point) => ({
           ...point,
           isLabelAnchor: point.config === labelPoint?.config,
-          label: point.config === labelPoint?.config ? point.model : "",
+          label:
+            showAllPointLabels || point.config === labelPoint?.config
+              ? point.model
+              : "",
         })),
       };
     })
@@ -312,6 +327,7 @@ const ComparisonDot = ({
   onPin,
   payload,
   pinnedConfig,
+  showAllPointLabels,
 }: ComparisonDotProps): ReactElement => {
   if (cx === undefined || cy === undefined || payload === undefined) {
     return <g />;
@@ -319,7 +335,7 @@ const ComparisonDot = ({
 
   const isActive = activeConfig === payload.config;
   const isPinned = pinnedConfig === payload.config;
-  const accessibleLabel = `${payload.model}, ${payload.effort} effort, ${Math.round(payload.score)}% FrontierCode score, ${formatFrontierCodeCost(payload.cost)} benchmark cost`;
+  const accessibleLabel = `${payload.model}, ${payload.effort} effort, ${formatChartPercentage(payload.score)} FrontierCode score, ${formatFrontierCodeCost(payload.cost)} benchmark cost`;
 
   return (
     <g
@@ -362,7 +378,7 @@ const ComparisonDot = ({
         strokeWidth={isActive ? 2 : 0}
       />
 
-      {isActive && !payload.isLabelAnchor ? (
+      {isActive && !payload.isLabelAnchor && !showAllPointLabels ? (
         <text
           fill={color}
           fontSize={10}
@@ -492,6 +508,7 @@ const ComparisonLabel = ({
   onLeave,
   onPin,
   payload,
+  showAllPointLabels,
   viewBox,
   x,
   y,
@@ -509,7 +526,7 @@ const ComparisonLabel = ({
 
   if (
     payload === undefined ||
-    !payload.isLabelAnchor ||
+    (!showAllPointLabels && !payload.isLabelAnchor) ||
     anchorX === undefined ||
     anchorY === undefined
   ) {
@@ -585,10 +602,15 @@ const ComparisonLabel = ({
  */
 const FrontierCodeComparisonChartContent = ({
   rows,
+  showAllPointLabels,
+  showModelLines,
 }: FrontierCodeComparisonChartProps): ReactElement => {
   const [hoveredConfig, setHoveredConfig] = useState<string | null>(null);
   const [pinnedConfig, setPinnedConfig] = useState<string | null>(null);
-  const series = useMemo(() => createChartSeries(rows), [rows]);
+  const series = useMemo(
+    () => createChartSeries(rows, showAllPointLabels),
+    [rows, showAllPointLabels],
+  );
   const scoreMaximum = getScoreMaximum(series);
   const scoreTicks = createScoreTicks(scoreMaximum);
   const costAxis = getCostAxis(series);
@@ -721,7 +743,7 @@ const FrontierCodeComparisonChartContent = ({
                 }}
                 reversed
                 ticks={costAxis.ticks}
-                tickFormatter={(value: number) => formatFrontierCodeCost(value)}
+                tickFormatter={formatCostAxisTick}
                 tickLine={false}
                 type="number"
               />
@@ -767,7 +789,7 @@ const FrontierCodeComparisonChartContent = ({
                       fontSize: 12,
                       fontWeight: 600,
                       position: "left",
-                      value: `${Math.round(activePoint.score)}%`,
+                      value: formatChartPercentage(activePoint.score),
                     }}
                     stroke={activeColor}
                     strokeDasharray="4 4"
@@ -784,16 +806,20 @@ const FrontierCodeComparisonChartContent = ({
                   isAnimationActive={false}
                   key={item.model}
                   line={
-                    <ComparisonLine
-                      activeModel={activeModel}
-                      color={item.color}
-                      configurations={item.points}
-                      fallbackConfig={item.labelConfig}
-                      model={item.model}
-                      onHover={handlePointHover}
-                      onLeave={handlePointLeave}
-                      onPin={handlePointPin}
-                    />
+                    showModelLines ? (
+                      <ComparisonLine
+                        activeModel={activeModel}
+                        color={item.color}
+                        configurations={item.points}
+                        fallbackConfig={item.labelConfig}
+                        model={item.model}
+                        onHover={handlePointHover}
+                        onLeave={handlePointLeave}
+                        onPin={handlePointPin}
+                      />
+                    ) : (
+                      false
+                    )
                   }
                   lineType="joint"
                   name={item.model}
@@ -807,6 +833,7 @@ const FrontierCodeComparisonChartContent = ({
                       onLeave={handlePointLeave}
                       onPin={handlePointPin}
                       pinnedConfig={pinnedPoint?.config ?? null}
+                      showAllPointLabels={showAllPointLabels}
                     />
                   )}
                 >
@@ -828,6 +855,7 @@ const FrontierCodeComparisonChartContent = ({
                           onLeave={handlePointLeave}
                           onPin={handlePointPin}
                           payload={labelPoint}
+                          showAllPointLabels={showAllPointLabels}
                         />
                       );
                     }}
@@ -862,6 +890,12 @@ const FrontierCodeComparisonChartContent = ({
  */
 export const FrontierCodeComparisonChart = ({
   rows,
+  showAllPointLabels,
+  showModelLines,
 }: FrontierCodeComparisonChartProps): ReactElement => (
-  <FrontierCodeComparisonChartContent rows={rows} />
+  <FrontierCodeComparisonChartContent
+    rows={rows}
+    showAllPointLabels={showAllPointLabels}
+    showModelLines={showModelLines}
+  />
 );

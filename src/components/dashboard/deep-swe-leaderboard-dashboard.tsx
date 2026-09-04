@@ -1,6 +1,8 @@
 import { ChevronDown, SearchIcon, X } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
+import { ModelEfficiencyToggle } from "@/components/dashboard/model-efficiency-toggle";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -36,6 +38,10 @@ import {
   getReasoningEffort,
   getReasoningEffortOrder,
 } from "@/utils/deep-swe";
+import {
+  getLessEfficientConfigIds,
+  type ModelEfficiencyCandidate,
+} from "@/utils/model-efficiency";
 
 import { DeepSweEfficiencyChart } from "./charts/deep-swe-efficiency-chart";
 import { DeepSwePerformanceRankingChart } from "./charts/deep-swe-performance-ranking-chart";
@@ -67,6 +73,7 @@ interface ToggleFilterProps<T extends string> {
 interface ConfigFilterProps {
   cursorMatchedCount: number;
   cursorMaxMatchedCount: number;
+  hiddenConfigIds: ReadonlySet<string>;
   models: ConfigModelGroup[];
   selectedConfigs: ReadonlySet<string>;
   totalCount: number;
@@ -215,6 +222,7 @@ const ToggleFilter = <T extends string>({
 const ConfigFilter = ({
   cursorMatchedCount,
   cursorMaxMatchedCount,
+  hiddenConfigIds,
   models,
   selectedConfigs,
   totalCount,
@@ -337,6 +345,9 @@ const ConfigFilter = ({
               );
               const selectedLevelCount = selectedLevelIds.length;
               const totalLevelCount = modelGroup.rows.length;
+              const hiddenLevelCount = modelGroup.rows.filter((row) =>
+                hiddenConfigIds.has(row.config),
+              ).length;
 
               return (
                 <DropdownMenuItem
@@ -362,6 +373,13 @@ const ConfigFilter = ({
                     >
                       {modelGroup.model}
                     </Label>
+
+                    {hiddenLevelCount > 0 && (
+                      <Badge className="shrink-0" variant="secondary">
+                        {hiddenLevelCount} level
+                        {hiddenLevelCount === 1 ? "" : "s"} hidden
+                      </Badge>
+                    )}
 
                     <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                       {selectedLevelCount}/{totalLevelCount}
@@ -469,6 +487,35 @@ export const DeepSweLeaderboardDashboard = ({
     [matchedRows, selectedConfigs],
   );
 
+  const selectedModelCount = useMemo(
+    () => new Set(selectedRows.map((row) => row.model)).size,
+    [selectedRows],
+  );
+
+  const [showMoreEfficientOnlyByVersion, setShowMoreEfficientOnlyByVersion] =
+    useState<Partial<Record<DeepSweVersion, boolean>>>({});
+  const showMoreEfficientOnly =
+    showMoreEfficientOnlyByVersion[version] ?? false;
+  const hiddenConfigIds = useMemo(() => {
+    if (!showMoreEfficientOnly) {
+      return new Set<string>();
+    }
+
+    const candidates: ModelEfficiencyCandidate[] = selectedRows.map((row) => ({
+      config: row.config,
+      model: row.model,
+      score: row.pass_at_1,
+      cost: row.mean_cost_usd,
+    }));
+
+    return getLessEfficientConfigIds(candidates);
+  }, [selectedRows, showMoreEfficientOnly]);
+  const visibleRows = useMemo(
+    () => selectedRows.filter((row) => !hiddenConfigIds.has(row.config)),
+    [hiddenConfigIds, selectedRows],
+  );
+  const hiddenConfigKey = [...hiddenConfigIds].sort().join("|");
+
   /**
    * Updates the excluded configurations for the active benchmark version.
    */
@@ -540,6 +587,20 @@ export const DeepSweLeaderboardDashboard = ({
     );
   };
 
+  /**
+   * Updates whether the charts show only more efficient models.
+   *
+   * @param nextShowMoreEfficientOnly - Whether to show only more efficient models.
+   */
+  const handleMoreEfficientOnlyChange = (
+    nextShowMoreEfficientOnly: boolean,
+  ): void => {
+    setShowMoreEfficientOnlyByVersion((current) => ({
+      ...current,
+      [version]: nextShowMoreEfficientOnly,
+    }));
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-3">
@@ -567,10 +628,18 @@ export const DeepSweLeaderboardDashboard = ({
           />
         </div>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <ModelEfficiencyToggle
+            hiddenConfigurationCount={hiddenConfigIds.size}
+            modelCount={selectedModelCount}
+            onShowMoreEfficientOnlyChange={handleMoreEfficientOnlyChange}
+            showMoreEfficientOnly={showMoreEfficientOnly}
+          />
+
           <ConfigFilter
             cursorMatchedCount={cursorFilterConfigs.cursorMatchedCount}
             cursorMaxMatchedCount={cursorFilterConfigs.cursorMaxMatchedCount}
+            hiddenConfigIds={hiddenConfigIds}
             models={configModels}
             onHideAll={() => handleSelectConfigs(new Set())}
             onSelectCursorModels={() =>
@@ -591,13 +660,19 @@ export const DeepSweLeaderboardDashboard = ({
       </div>
 
       <DeepSweEfficiencyChart
+        key={`${version}-${metric}-${hiddenConfigKey}`}
         leaderboard={leaderboard}
         metric={metric}
-        rows={selectedRows}
+        rows={visibleRows}
+        showAllPointLabels={showMoreEfficientOnly}
+        showModelLines={!showMoreEfficientOnly}
         version={version}
       />
 
-      <DeepSwePerformanceRankingChart rows={selectedRows} />
+      <DeepSwePerformanceRankingChart
+        key={`${version}-${hiddenConfigKey}`}
+        rows={visibleRows}
+      />
     </div>
   );
 };

@@ -9,6 +9,7 @@ import {
   DEEP_SWE_PROVIDER_COLORS,
   DEEP_SWE_REASONING_EFFORT_ORDER,
 } from "@/types-and-constants/deep-swe";
+import { formatCostAxisTick } from "@/utils/chart";
 
 /**
  * Checks whether a value is a non-null object.
@@ -304,7 +305,7 @@ export const formatMetricTick = (
 ): string => {
   switch (metric) {
     case "cost":
-      return `$${Number.isInteger(value) ? value : value.toFixed(1)}`;
+      return formatCostAxisTick(value);
 
     case "outputTokens":
       return formatCompactNumber(value);

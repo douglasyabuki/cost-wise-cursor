@@ -10,6 +10,24 @@ export interface ScatterLinePoint {
 }
 
 /**
+ * Formats a dollar value for a compact cost-axis tick.
+ *
+ * @param value - Cost value in US dollars.
+ * @returns Dollar value with decimals only when the tick is fractional.
+ */
+export const formatCostAxisTick = (value: number): string =>
+  `$${Number.isInteger(value) ? value : value.toFixed(1)}`;
+
+/**
+ * Formats a chart percentage value with two decimal places.
+ *
+ * @param value - Percentage-point value.
+ * @returns Percentage with two decimal places.
+ */
+export const formatChartPercentage = (value: number): string =>
+  `${value.toFixed(2)}%`;
+
+/**
  * Pointer position in viewport pixels and the SVG element receiving the event.
  */
 interface LinePointerEvent {

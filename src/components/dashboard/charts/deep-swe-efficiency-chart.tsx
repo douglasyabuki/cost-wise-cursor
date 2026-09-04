@@ -27,7 +27,11 @@ import type {
   DeepSweVersion,
   EfficiencyMetric,
 } from "@/types-and-constants/deep-swe";
-import { getNearestLineConfig, type ScatterLinePoint } from "@/utils/chart";
+import {
+  formatChartPercentage,
+  getNearestLineConfig,
+  type ScatterLinePoint,
+} from "@/utils/chart";
 import { formatLongDate } from "@/utils/date";
 import {
   formatMetricTick,
@@ -43,6 +47,10 @@ interface DeepSweEfficiencyChartProps {
   leaderboard: DeepSweLeaderboard;
   metric: EfficiencyMetric;
   rows: readonly DeepSweLeaderboardRow[];
+  /** Whether every visible point should display its model and effort labels. */
+  showAllPointLabels: boolean;
+  /** Whether connected model lines should be rendered. */
+  showModelLines: boolean;
   version: DeepSweVersion;
 }
 
@@ -89,6 +97,7 @@ interface EfficiencyDotProps extends ScatterShapeProps {
   color: string;
   metric: EfficiencyMetric;
   pinnedConfig: string | null;
+  showAllPointLabels: boolean;
   onHover: (config: string) => void;
   onLeave: () => void;
   onPin: (config: string) => void;
@@ -122,6 +131,7 @@ interface EfficiencyLabelProps extends LabelContentProps {
   activeModel: string | null;
   color: string;
   model: string;
+  showAllPointLabels: boolean;
   onHover: (config: string) => void;
   onLeave: () => void;
   onPin: (config: string) => void;
@@ -181,6 +191,7 @@ const normalizeModelIdentifier = (model: string): string =>
 const createChartSeries = (
   rows: readonly DeepSweLeaderboardRow[],
   metric: EfficiencyMetric,
+  showAllPointLabels: boolean,
 ): ChartSeries[] => {
   const groupedPoints = new Map<string, ChartPoint[]>();
 
@@ -233,7 +244,10 @@ const createChartSeries = (
         points: points.map((point) => ({
           ...point,
           isLabelAnchor: point.config === labelPoint.config,
-          label: point.config === labelPoint.config ? point.model : "",
+          label:
+            showAllPointLabels || point.config === labelPoint.config
+              ? point.model
+              : "",
         })),
       };
     })
@@ -395,6 +409,7 @@ const EfficiencyDot = ({
   onPin,
   payload,
   pinnedConfig,
+  showAllPointLabels,
 }: EfficiencyDotProps): ReactElement => {
   if (cx === undefined || cy === undefined || payload === undefined) {
     return <g />;
@@ -405,7 +420,7 @@ const EfficiencyDot = ({
   const pointColor = payload.isLabelAnchor
     ? color
     : `color-mix(in oklab, ${color} 84%, var(--card))`;
-  const accessibleLabel = `${payload.model}, ${payload.effort} effort, ${Math.round(payload.score)}% score, ${formatMetricValue(metric, payload.metricValue)}`;
+  const accessibleLabel = `${payload.model}, ${payload.effort} effort, ${formatChartPercentage(payload.score)} score, ${formatMetricValue(metric, payload.metricValue)}`;
 
   return (
     <g
@@ -444,7 +459,7 @@ const EfficiencyDot = ({
         strokeWidth={isActive ? 2 : 0}
       />
 
-      {isActive && !payload.isLabelAnchor ? (
+      {isActive && !payload.isLabelAnchor && !showAllPointLabels ? (
         <text
           fill={color}
           fontSize={10}
@@ -580,6 +595,7 @@ const EfficiencyLabel = ({
   onLeave,
   onPin,
   payload,
+  showAllPointLabels,
   viewBox,
   x,
   y,
@@ -597,7 +613,7 @@ const EfficiencyLabel = ({
 
   if (
     payload === undefined ||
-    !payload.isLabelAnchor ||
+    (!showAllPointLabels && !payload.isLabelAnchor) ||
     anchorX === undefined ||
     anchorY === undefined
   ) {
@@ -675,6 +691,8 @@ const DeepSweEfficiencyChartContent = ({
   leaderboard,
   metric,
   rows,
+  showAllPointLabels,
+  showModelLines,
 }: DeepSweEfficiencyChartContentProps): ReactElement => {
   const [hoveredConfig, setHoveredConfig] = useState<string | null>(null);
   const [pinnedConfig, setPinnedConfig] = useState<string | null>(null);
@@ -696,7 +714,10 @@ const DeepSweEfficiencyChartContent = ({
     return undefined;
   }, [pinnedConfig]);
 
-  const series = useMemo(() => createChartSeries(rows, metric), [metric, rows]);
+  const series = useMemo(
+    () => createChartSeries(rows, metric, showAllPointLabels),
+    [metric, rows, showAllPointLabels],
+  );
 
   const lastJobDate = formatLongDate(
     leaderboard.latest_job?.finished_at ?? leaderboard.generated_at,
@@ -878,7 +899,7 @@ const DeepSweEfficiencyChartContent = ({
                       fontSize: 12,
                       fontWeight: 600,
                       position: "bottom",
-                      value: formatMetricTick(metric, activePoint.metricValue),
+                      value: formatMetricValue(metric, activePoint.metricValue),
                     }}
                     stroke={activeColor}
                     strokeDasharray="4 4"
@@ -892,7 +913,7 @@ const DeepSweEfficiencyChartContent = ({
                       fontSize: 12,
                       fontWeight: 600,
                       position: "left",
-                      value: `${Math.round(activePoint.score)}%`,
+                      value: formatChartPercentage(activePoint.score),
                     }}
                     stroke={activeColor}
                     strokeDasharray="4 4"
@@ -909,16 +930,20 @@ const DeepSweEfficiencyChartContent = ({
                   isAnimationActive={false}
                   key={item.model}
                   line={
-                    <EfficiencyLine
-                      activeModel={activeModel}
-                      color={item.color}
-                      configurations={item.points}
-                      fallbackConfig={item.labelConfig}
-                      model={item.model}
-                      onHover={handlePointHover}
-                      onLeave={handlePointLeave}
-                      onPin={handlePointPin}
-                    />
+                    showModelLines ? (
+                      <EfficiencyLine
+                        activeModel={activeModel}
+                        color={item.color}
+                        configurations={item.points}
+                        fallbackConfig={item.labelConfig}
+                        model={item.model}
+                        onHover={handlePointHover}
+                        onLeave={handlePointLeave}
+                        onPin={handlePointPin}
+                      />
+                    ) : (
+                      false
+                    )
                   }
                   lineType="joint"
                   name={item.model}
@@ -933,6 +958,7 @@ const DeepSweEfficiencyChartContent = ({
                       onLeave={handlePointLeave}
                       onPin={handlePointPin}
                       pinnedConfig={visiblePinnedConfig}
+                      showAllPointLabels={showAllPointLabels}
                     />
                   )}
                 >
@@ -954,6 +980,7 @@ const DeepSweEfficiencyChartContent = ({
                           onLeave={handlePointLeave}
                           onPin={handlePointPin}
                           payload={labelPoint}
+                          showAllPointLabels={showAllPointLabels}
                         />
                       );
                     }}
@@ -990,6 +1017,8 @@ export const DeepSweEfficiencyChart = ({
   leaderboard,
   metric,
   rows,
+  showAllPointLabels,
+  showModelLines,
   version,
 }: DeepSweEfficiencyChartProps): ReactElement => {
   return (
@@ -998,6 +1027,8 @@ export const DeepSweEfficiencyChart = ({
       leaderboard={leaderboard}
       metric={metric}
       rows={rows}
+      showAllPointLabels={showAllPointLabels}
+      showModelLines={showModelLines}
     />
   );
 };
