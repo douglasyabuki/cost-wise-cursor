@@ -58,8 +58,8 @@ browser.
 
 The FrontierCode dashboard fetches both `v1.1` and `v1` once, then selects the
 version and subset locally. Its controls include `Main (100)` and
-`Extended (150)`, Best or All effort levels, and Score or Cost Efficiency
-ranking.
+`Extended (150)`, plus Best or All effort levels. Ranking order is controlled
+through the sortable table headers.
 
 FrontierCode fields are mapped as follows:
 
@@ -150,10 +150,11 @@ The efficiency chart plots DeepSWE score against one of these metrics:
 - Average output tokens
 - Average agent steps
 
-Configurations belonging to the same model are connected. Hovering or pinning
-a configuration highlights its model family and shows its exact axis values.
-Changing the benchmark version resets chart focus while preserving the selected
-efficiency metric.
+Configurations belonging to the same model can be connected or shown as
+independent points. Pointer and keyboard focus reveal formatted guides and a
+TanStack Charts tooltip; click, Enter, or Space pins the detail, while Escape
+or the tooltip action dismisses it. Changing the benchmark version resets chart
+focus while preserving the selected efficiency metric.
 
 ### FrontierCode comparison chart
 
@@ -161,24 +162,22 @@ The FrontierCode chart plots `new_score × 100` on the vertical axis as
 **FrontierCode score** and benchmark cost on the horizontal axis. Higher scores
 appear farther up, and lower costs appear on the right. The `most efficient ↗`
 cue identifies the upper-right direction. Reasoning-effort configurations
-belonging to the same model remain connected.
+belonging to the same model use the same chart interaction and optional line
+behavior as DeepSWE.
 
-### Performance ranking chart
+### Performance ranking tables
 
-The performance ranking chart uses the same filtered configurations and benchmark
-version as the efficiency chart.
+The performance ranking tables use the same filtered configurations and
+benchmark version as the efficiency charts. Every column header is a keyboard-
+accessible sort control with a visible direction indicator. Sorting is limited
+to one column, always has an active direction, and starts with benchmark score
+descending. Model and harness begin ascending; numeric columns begin descending.
 
 The configuration-detail control provides two views:
 
 - **Best** — shows the highest available reasoning-effort configuration for
   each selected model. Pass@1 breaks ties at the same effort level.
 - **All effort levels** — shows every selected configuration.
-
-The ranking-metric control determines how those configurations are ordered:
-
-- **Performance** — orders configurations by Pass@1.
-- **Cost efficiency** — orders configurations by Pass@1 percentage points per
-  DeepSWE benchmark dollar.
 
 Cost efficiency is calculated as:
 
@@ -187,23 +186,23 @@ Cost efficiency is calculated as:
 ```
 
 For example, a configuration with 80% Pass@1 and an average benchmark cost of
-$2 scores 40 Pass@1 points per dollar. Configurations without usable cost data
-appear last when this ranking is selected.
+$2 scores 40 Pass@1 points per dollar. Configurations without usable numeric
+data remain last in either sort direction.
 
-Each row shows Pass@1, its confidence interval, average benchmark cost, cost
-efficiency, average output tokens, and average agent steps. The ranking has no
-separate model or benchmark-version filter, which keeps both visualizations in
-sync.
+Each DeepSWE row shows the model and effort, Pass@1 with its confidence
+interval, average benchmark cost, cost efficiency, average output tokens, and
+average agent steps. The table has no separate model or benchmark-version
+filter, which keeps both visualizations in sync. The complete column set stays
+available on small screens through horizontal scrolling.
 
 The cost-efficiency score uses DeepSWE's observed benchmark cost. It is not an
 estimate of the cost of running the model in Cursor.
 
-FrontierCode's ranking supports Score and Cost Efficiency ordering. It does not
-show confidence intervals because the source does not provide confidence bounds.
-Its Best view selects the configuration with the highest `new_score` for each
-model, using reasoning effort as a tie-breaker. FrontierCode ranking rows show
-FrontierCode score, pass rate, average benchmark cost, cost efficiency,
-reasoning effort, harness, and flagged rate when available.
+FrontierCode's table does not show confidence intervals because the source does
+not provide confidence bounds. Its Best view selects the configuration with the
+highest `new_score` for each model, using reasoning effort as a tie-breaker. Its
+sortable columns show model and effort, FrontierCode score, pass rate, average
+benchmark cost, cost efficiency, harness, and flagged rate when available.
 
 ## Tech stack
 
@@ -211,7 +210,8 @@ reasoning effort, harness, and flagged rate when available.
 - TypeScript
 - [TanStack Query](https://tanstack.com/query/latest) for fetching, caching, and
   request cancellation
-- [Recharts](https://recharts.org/) for the efficiency chart
+- [TanStack Charts](https://tanstack.com/charts/latest) for the efficiency charts
+- [TanStack Table](https://tanstack.com/table/latest) for sortable ranking tables
 - [shadcn/ui](https://ui.shadcn.com/) components
 - Tailwind CSS
 - Vercel for deployment

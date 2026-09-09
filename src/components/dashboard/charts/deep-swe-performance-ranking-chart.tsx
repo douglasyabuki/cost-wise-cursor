@@ -1,8 +1,27 @@
-import { type ReactElement, useMemo, useState } from "react";
+import {
+  createColumnHelper,
+  createSortedRowModel,
+  rowSortingFeature,
+  tableFeatures,
+  useTable,
+} from "@tanstack/react-table";
+import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 import type { DeepSweLeaderboardRow } from "@/types-and-constants/deep-swe";
 import {
   compareModelNames,
@@ -18,7 +37,7 @@ import {
 } from "@/utils/deep-swe";
 
 type RankingMode = "best" | "all";
-type RankingMetric = "performance" | "costEfficiency";
+type SortDirection = false | "asc" | "desc";
 
 interface DeepSwePerformanceRankingChartProps {
   rows: readonly DeepSweLeaderboardRow[];
@@ -43,11 +62,19 @@ interface ToggleFilterProps<T extends string> {
   onChange: (value: T) => void;
 }
 
-interface RankingRowProps {
+interface SortableHeaderProps {
+  align?: "left" | "right";
+  column: {
+    getIsSorted: () => SortDirection;
+    getNextSortingOrder: () => SortDirection;
+    toggleSorting: (descending?: boolean) => void;
+  };
+  label: string;
+}
+
+interface ScoreBarProps {
   axisMaximum: number;
-  isSelected: boolean;
   row: DeepSweLeaderboardRow;
-  onSelect: (config: string) => void;
 }
 
 interface ScoreAxisProps {
@@ -59,11 +86,6 @@ const RANKING_MODE_OPTIONS = [
   { label: "Best", value: "best" },
   { label: "All effort levels", value: "all" },
 ] as const satisfies readonly ToggleFilterOption<RankingMode>[];
-
-const RANKING_METRIC_OPTIONS = [
-  { label: "Performance", value: "performance" },
-  { label: "Cost efficiency", value: "costEfficiency" },
-] as const satisfies readonly ToggleFilterOption<RankingMetric>[];
 
 const REASONING_EFFORT_RANK: Readonly<Record<string, number>> = {
   default: 0,
@@ -78,6 +100,14 @@ const REASONING_EFFORT_RANK: Readonly<Record<string, number>> = {
 
 const SCORE_TICK_STEP = 20;
 const MINIMUM_SCORE_AXIS_MAXIMUM = 80;
+const tableFeaturesConfig = tableFeatures({
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+});
+const columnHelper = createColumnHelper<
+  typeof tableFeaturesConfig,
+  DeepSweLeaderboardRow
+>();
 
 /**
  * Returns a sortable rank for a reasoning-effort label.
@@ -88,16 +118,7 @@ const MINIMUM_SCORE_AXIS_MAXIMUM = 80;
 const getReasoningEffortRank = (effort: string): number =>
   REASONING_EFFORT_RANK[effort.toLowerCase()] ?? -1;
 
-/**
- * Chooses the highest available reasoning-effort configuration for a model.
- *
- * Pass@1 breaks ties between configurations at the same effort level. In this
- * component, "Best" means highest available effort, not highest measured
- * Pass@1.
- *
- * @param rows - Configurations belonging to one model.
- * @returns Highest-effort configuration.
- */
+/** Chooses the highest available reasoning-effort configuration for a model. */
 const getBestEffortRow = (
   rows: readonly DeepSweLeaderboardRow[],
 ): DeepSweLeaderboardRow =>
@@ -106,10 +127,7 @@ const getBestEffortRow = (
       getReasoningEffortRank(getReasoningEffort(row)) -
       getReasoningEffortRank(getReasoningEffort(bestRow));
 
-    if (effortDifference > 0) {
-      return row;
-    }
-
+    if (effortDifference > 0) return row;
     if (effortDifference === 0 && row.pass_at_1 > bestRow.pass_at_1) {
       return row;
     }
@@ -117,13 +135,7 @@ const getBestEffortRow = (
     return bestRow;
   });
 
-/**
- * Groups leaderboard rows by model and orders the groups by the Pass@1 score
- * of each model's highest-effort configuration.
- *
- * @param rows - Filtered leaderboard configurations.
- * @returns Score-ordered model groups.
- */
+/** Groups leaderboard rows by model and orders them by their default score. */
 const groupRowsByModel = (
   rows: readonly DeepSweLeaderboardRow[],
 ): ModelGroup[] => {
@@ -131,7 +143,6 @@ const groupRowsByModel = (
 
   rows.forEach((row) => {
     const modelRows = rowsByModel.get(row.model) ?? [];
-
     modelRows.push(row);
     rowsByModel.set(row.model, modelRows);
   });
@@ -149,13 +160,7 @@ const groupRowsByModel = (
     );
 };
 
-/**
- * Orders configurations by Pass@1.
- *
- * @param first - First configuration.
- * @param second - Second configuration.
- * @returns Array-sort comparison value.
- */
+/** Orders configurations by Pass@1 with stable model and effort tie-breakers. */
 const compareByPerformance = (
   first: DeepSweLeaderboardRow,
   second: DeepSweLeaderboardRow,
@@ -165,49 +170,7 @@ const compareByPerformance = (
   getReasoningEffortRank(getReasoningEffort(second)) -
     getReasoningEffortRank(getReasoningEffort(first));
 
-/**
- * Orders configurations by Pass@1 points per benchmark dollar.
- *
- * Rows without usable cost data are placed last. Performance is used as the
- * tie breaker.
- *
- * @param first - First configuration.
- * @param second - Second configuration.
- * @returns Array-sort comparison value.
- */
-const compareByCostEfficiency = (
-  first: DeepSweLeaderboardRow,
-  second: DeepSweLeaderboardRow,
-): number => {
-  const firstEfficiency = getCostEfficiency(first);
-  const secondEfficiency = getCostEfficiency(second);
-
-  if (firstEfficiency === null && secondEfficiency === null) {
-    return compareByPerformance(first, second);
-  }
-
-  if (firstEfficiency === null) {
-    return 1;
-  }
-
-  if (secondEfficiency === null) {
-    return -1;
-  }
-
-  return (
-    secondEfficiency - firstEfficiency || compareByPerformance(first, second)
-  );
-};
-
-/**
- * Calculates a readable score-axis maximum.
- *
- * The maximum is at least 80%, grows in 20-point increments when necessary,
- * and never exceeds 100%.
- *
- * @param rows - Rows currently shown in the ranking.
- * @returns Percentage-axis maximum.
- */
+/** Calculates the shared score-axis maximum for visible rows. */
 const getScoreAxisMaximum = (
   rows: readonly DeepSweLeaderboardRow[],
 ): number => {
@@ -227,36 +190,27 @@ const getScoreAxisMaximum = (
   );
 };
 
-/**
- * Creates evenly spaced score-axis ticks.
- *
- * @param maximum - Axis maximum percentage.
- * @returns Percentage tick values.
- */
+/** Creates evenly spaced percentage ticks for the score footer. */
 const createScoreTicks = (maximum: number): number[] =>
   Array.from(
-    {
-      length: Math.floor(maximum / SCORE_TICK_STEP) + 1,
-    },
+    { length: Math.floor(maximum / SCORE_TICK_STEP) + 1 },
     (_, index) => index * SCORE_TICK_STEP,
   );
 
-/**
- * Converts a fractional score to a percentage position within the axis.
- *
- * @param value - Fractional score value.
- * @param axisMaximum - Percentage-axis maximum.
- * @returns Clamped CSS percentage.
- */
+/** Converts a fractional score into a clamped percentage of the shared axis. */
 const getAxisPosition = (value: number, axisMaximum: number): number =>
   Math.min(100, Math.max(0, (value * 100 * 100) / axisMaximum));
 
-/**
- * Renders a single-selection toggle filter.
- *
- * @param props - Toggle-filter properties.
- * @returns Filter control.
- */
+/** Returns the semantic aria-sort value for a TanStack sorting direction. */
+const getAriaSort = (
+  direction: SortDirection,
+): "ascending" | "descending" | "none" => {
+  if (direction === "asc") return "ascending";
+  if (direction === "desc") return "descending";
+  return "none";
+};
+
+/** Renders the retained Best/All ranking-detail control. */
 const ToggleFilter = <T extends string>({
   label,
   options,
@@ -268,10 +222,7 @@ const ToggleFilter = <T extends string>({
     className="bg-background"
     onValueChange={(values) => {
       const [nextValue] = values;
-
-      if (nextValue !== undefined) {
-        onChange(nextValue as T);
-      }
+      if (nextValue !== undefined) onChange(nextValue as T);
     }}
     size="sm"
     spacing={0}
@@ -291,16 +242,38 @@ const ToggleFilter = <T extends string>({
   </ToggleGroup>
 );
 
-/**
- * Renders a score bar with its confidence-interval whisker.
- *
- * @param props - Score-visualization properties.
- * @returns Horizontal score visualization.
- */
-const ScoreBar = ({
-  axisMaximum,
-  row,
-}: Pick<RankingRowProps, "axisMaximum" | "row">): ReactElement => {
+/** Renders a two-state sortable table header. */
+const SortableHeader = ({
+  align = "left",
+  column,
+  label,
+}: SortableHeaderProps): ReactElement => {
+  const direction = column.getIsSorted();
+  const nextDirection = column.getNextSortingOrder();
+  const SortIcon =
+    direction === "asc"
+      ? ArrowUp
+      : direction === "desc"
+        ? ArrowDown
+        : ChevronsUpDown;
+
+  return (
+    <Button
+      aria-label={`Sort ${label} ${nextDirection === "desc" ? "descending" : "ascending"}`}
+      className={cn("h-8 px-2", align === "right" && "ml-auto")}
+      onClick={() => column.toggleSorting()}
+      size="sm"
+      type="button"
+      variant="ghost"
+    >
+      {label}
+      <SortIcon data-icon="inline-end" />
+    </Button>
+  );
+};
+
+/** Renders a score bar with its confidence-interval whisker. */
+const ScoreBar = ({ axisMaximum, row }: ScoreBarProps): ReactElement => {
   const confidenceBounds = getConfidenceBounds(row);
   const scorePosition = getAxisPosition(row.pass_at_1, axisMaximum);
   const confidenceStart = getAxisPosition(confidenceBounds.lower, axisMaximum);
@@ -308,17 +281,12 @@ const ScoreBar = ({
   const color = getModelColor(row.model);
 
   return (
-    <div aria-hidden="true" className="relative h-5 min-w-0 flex-1">
+    <div aria-hidden="true" className="relative h-5 min-w-36 flex-1">
       <div className="bg-muted/50 absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-sm" />
-
       <div
         className="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-sm transition-[width] duration-200"
-        style={{
-          backgroundColor: color,
-          width: `${scorePosition}%`,
-        }}
+        style={{ backgroundColor: color, width: `${scorePosition}%` }}
       />
-
       <div
         className="bg-foreground/80 absolute top-1/2 h-px -translate-y-1/2"
         style={{
@@ -329,258 +297,233 @@ const ScoreBar = ({
         <span className="bg-foreground/80 absolute top-1/2 left-0 h-2 w-px -translate-y-1/2" />
         <span className="bg-foreground/80 absolute top-1/2 right-0 h-2 w-px -translate-y-1/2" />
       </div>
-
       <span
         className="border-card absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
-        style={{
-          backgroundColor: color,
-          left: `${scorePosition}%`,
-        }}
+        style={{ backgroundColor: color, left: `${scorePosition}%` }}
       />
     </div>
   );
 };
 
-/**
- * Renders one selectable leaderboard configuration.
- *
- * @param props - Ranking-row properties.
- * @returns Responsive ranking row.
- */
-const RankingRow = ({
-  axisMaximum,
-  isSelected,
-  row,
-  onSelect,
-}: RankingRowProps): ReactElement => {
-  const effort = getReasoningEffort(row);
-  const score = formatScore(row.pass_at_1);
-  const confidence = formatConfidence(row);
-  const cost = formatCost(row.mean_cost_usd);
-  const costEfficiency = formatCostEfficiency(getCostEfficiency(row));
-  const outputTokens = formatCompactNumber(row.mean_output_tokens);
-  const agentSteps = formatCompactNumber(row.mean_agent_steps);
-
-  return (
-    <Button
-      aria-label={`${row.model}, ${effort} effort, Pass at 1 ${score}, average cost ${cost}, cost efficiency ${costEfficiency}`}
-      aria-pressed={isSelected}
-      className="hover:bg-muted/50 aria-pressed:bg-accent/70 h-auto w-full justify-start rounded-none px-2 py-3 text-left whitespace-normal shadow-none lg:px-3"
-      onClick={() => onSelect(row.config)}
-      title={`${row.model} · ${effort} · ${score} ${confidence}`}
-      type="button"
-      variant="ghost"
-    >
-      <div className="w-full min-w-0 lg:hidden">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            aria-hidden="true"
-            className="size-2 shrink-0 rounded-full"
-            style={{
-              backgroundColor: getModelColor(row.model),
-            }}
-          />
-
-          <span className="min-w-0 flex-1 truncate font-medium">
-            {row.model}
-          </span>
-
-          <Badge className="font-mono text-[10px]" variant="outline">
-            {effort.toUpperCase()}
-          </Badge>
-        </div>
-
-        <div className="mt-3 flex items-center gap-3">
-          <ScoreBar axisMaximum={axisMaximum} row={row} />
-
-          <span className="w-12 text-right font-medium tabular-nums">
-            {score}
-          </span>
-        </div>
-
-        <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <dt className="text-muted-foreground">Confidence</dt>
-            <dd className="mt-0.5 tabular-nums">{confidence}</dd>
-          </div>
-
-          <div>
-            <dt className="text-muted-foreground">Avg cost</dt>
-            <dd className="mt-0.5 tabular-nums">{cost}</dd>
-          </div>
-
-          <div>
-            <dt className="text-muted-foreground">Cost efficiency</dt>
-            <dd className="mt-0.5 tabular-nums">{costEfficiency}</dd>
-          </div>
-
-          <div>
-            <dt className="text-muted-foreground">Out tok</dt>
-            <dd className="mt-0.5 tabular-nums">{outputTokens}</dd>
-          </div>
-
-          <div>
-            <dt className="text-muted-foreground">Steps</dt>
-            <dd className="mt-0.5 tabular-nums">{agentSteps}</dd>
-          </div>
-        </dl>
-      </div>
-
-      <div className="hidden w-full min-w-0 grid-cols-[minmax(170px,1fr)_minmax(240px,2fr)_5rem_6rem_5rem_4rem] items-center gap-4 lg:grid">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            aria-hidden="true"
-            className="size-2 shrink-0 rounded-full"
-            style={{
-              backgroundColor: getModelColor(row.model),
-            }}
-          />
-
-          <span className="min-w-0 truncate font-medium">{row.model}</span>
-
-          <Badge className="shrink-0 font-mono text-[10px]" variant="outline">
-            {effort.toUpperCase()}
-          </Badge>
-        </div>
-
-        <div className="grid min-w-0 grid-cols-[minmax(120px,1fr)_4.75rem] items-center gap-3">
-          <ScoreBar axisMaximum={axisMaximum} row={row} />
-
-          <div className="text-right tabular-nums">
-            <div className="font-medium">{score}</div>
-            <div className="text-muted-foreground text-[10px]">
-              {confidence}
-            </div>
-          </div>
-        </div>
-
-        <span className="text-right tabular-nums">{cost}</span>
-
-        <span className="text-right tabular-nums">{costEfficiency}</span>
-
-        <span className="text-right tabular-nums">{outputTokens}</span>
-
-        <span className="text-right tabular-nums">{agentSteps}</span>
-      </div>
-    </Button>
-  );
-};
-
-/**
- * Renders the percentage axis below the score bars.
- *
- * @param props - Axis maximum and tick values.
- * @returns Desktop score axis.
- */
+/** Renders the percentage guide beneath the score column. */
 const ScoreAxis = ({ maximum, ticks }: ScoreAxisProps): ReactElement => (
-  <div className="hidden grid-cols-[minmax(170px,1fr)_minmax(240px,2fr)_5rem_6rem_5rem_4rem] items-start gap-4 px-3 pt-2 pb-1 lg:grid">
-    <div />
+  <div className="relative h-5 min-w-36 flex-1">
+    {ticks.map((tick) => {
+      const position = (tick / maximum) * 100;
+      const transform =
+        tick === 0
+          ? "translateX(0)"
+          : tick === maximum
+            ? "translateX(-100%)"
+            : "translateX(-50%)";
 
-    <div className="grid min-w-0 grid-cols-[minmax(120px,1fr)_4.75rem] gap-3">
-      <div className="relative h-5">
-        {ticks.map((tick) => {
-          const position = (tick / maximum) * 100;
-          const transform =
-            tick === 0
-              ? "translateX(0)"
-              : tick === maximum
-                ? "translateX(-100%)"
-                : "translateX(-50%)";
-
-          return (
-            <span
-              className="text-muted-foreground absolute top-0 text-[10px] tabular-nums"
-              key={tick}
-              style={{
-                left: `${position}%`,
-                transform,
-              }}
-            >
-              {tick}%
-            </span>
-          );
-        })}
-      </div>
-
-      <div />
-    </div>
+      return (
+        <span
+          className="text-muted-foreground absolute top-0 text-[10px] tabular-nums"
+          key={tick}
+          style={{ left: `${position}%`, transform }}
+        >
+          {tick}%
+        </span>
+      );
+    })}
   </div>
 );
 
 /**
- * Renders the DeepSWE performance ranking chart.
+ * Renders the DeepSWE performance ranking as a sortable semantic table.
  *
- * The parent dashboard supplies filtered rows and can remount this component
- * when the benchmark version changes, resetting its local ranking mode and
- * selected configuration.
+ * The table starts sorted by Pass@1 descending and keeps one active sort
+ * column. Every header remains available through horizontal mobile scrolling.
  *
- * @param props - Filtered rows and optional selection callback.
- * @returns Interactive performance ranking chart.
+ * @param props - Filtered rows and optional configuration-selection callback.
+ * @returns Interactive DeepSWE ranking table.
  */
 export const DeepSwePerformanceRankingChart = ({
   onConfigSelect,
   rows,
 }: DeepSwePerformanceRankingChartProps): ReactElement => {
   const modelGroups = useMemo(() => groupRowsByModel(rows), [rows]);
-
   const [rankingMode, setRankingMode] = useState<RankingMode>("best");
-
-  const [rankingMetric, setRankingMetric] =
-    useState<RankingMetric>("performance");
-
   const [selectedConfig, setSelectedConfig] = useState<string | null>(null);
-
-  const visibleRows = useMemo(() => {
-    const rankedRows = modelGroups.flatMap((group) =>
-      rankingMode === "best" ? [group.bestRow] : group.rows,
-    );
-
-    return [...rankedRows].sort(
-      rankingMetric === "costEfficiency"
-        ? compareByCostEfficiency
-        : compareByPerformance,
-    );
-  }, [modelGroups, rankingMetric, rankingMode]);
-
+  const visibleRows = useMemo(
+    () =>
+      modelGroups
+        .flatMap((group) =>
+          rankingMode === "best" ? [group.bestRow] : group.rows,
+        )
+        .sort(compareByPerformance),
+    [modelGroups, rankingMode],
+  );
   const activeSelectedConfig =
-    selectedConfig !== null && rows.some((row) => row.config === selectedConfig)
+    selectedConfig !== null &&
+    visibleRows.some((row) => row.config === selectedConfig)
       ? selectedConfig
       : null;
-
   const scoreAxisMaximum = getScoreAxisMaximum(visibleRows);
-
   const scoreTicks = createScoreTicks(scoreAxisMaximum);
 
-  /**
-   * Changes the ranking detail and clears a potentially hidden selection.
-   *
-   * @param nextMode - Ranking detail to display.
-   */
+  const handleConfigSelect = useCallback(
+    (config: string): void => {
+      const nextConfig = activeSelectedConfig === config ? null : config;
+      setSelectedConfig(nextConfig);
+      onConfigSelect?.(nextConfig);
+    },
+    [activeSelectedConfig, onConfigSelect],
+  );
+
+  const columns = useMemo(
+    () =>
+      columnHelper.columns([
+        columnHelper.accessor("model", {
+          header: ({ column }) => (
+            <SortableHeader column={column} label="Model" />
+          ),
+          sortDescFirst: false,
+          sortFn: (first, second) =>
+            compareModelNames(first.original.model, second.original.model) ||
+            getReasoningEffortRank(getReasoningEffort(first.original)) -
+              getReasoningEffortRank(getReasoningEffort(second.original)),
+          cell: ({ row }) => {
+            const item = row.original;
+            const effort = getReasoningEffort(item);
+
+            return (
+              <Button
+                aria-label={`Select ${item.model}, ${effort} effort`}
+                aria-pressed={activeSelectedConfig === item.config}
+                className="h-auto max-w-64 justify-start px-2 py-1 text-left"
+                onClick={() => handleConfigSelect(item.config)}
+                title={`${item.model} · ${effort}`}
+                type="button"
+                variant="ghost"
+              >
+                <span
+                  aria-hidden="true"
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: getModelColor(item.model) }}
+                />
+                <span className="truncate font-medium">{item.model}</span>
+                <Badge
+                  className="shrink-0 font-mono text-[10px]"
+                  variant="outline"
+                >
+                  {effort.toUpperCase()}
+                </Badge>
+              </Button>
+            );
+          },
+        }),
+        columnHelper.accessor("pass_at_1", {
+          id: "score",
+          header: ({ column }) => (
+            <SortableHeader column={column} label="Pass@1" />
+          ),
+          sortDescFirst: true,
+          cell: ({ row }) => (
+            <div className="flex min-w-64 items-center gap-3">
+              <ScoreBar axisMaximum={scoreAxisMaximum} row={row.original} />
+              <div className="w-16 text-right tabular-nums">
+                <div className="font-medium">
+                  {formatScore(row.original.pass_at_1)}
+                </div>
+                <div className="text-muted-foreground text-[10px]">
+                  {formatConfidence(row.original)}
+                </div>
+              </div>
+            </div>
+          ),
+        }),
+        columnHelper.accessor(
+          (row) =>
+            row.mean_cost_usd !== null && Number.isFinite(row.mean_cost_usd)
+              ? row.mean_cost_usd
+              : undefined,
+          {
+            id: "cost",
+            header: ({ column }) => (
+              <SortableHeader align="right" column={column} label="Avg cost" />
+            ),
+            sortDescFirst: true,
+            sortUndefined: "last",
+            cell: ({ row }) => (
+              <span className="block text-right tabular-nums">
+                {formatCost(row.original.mean_cost_usd)}
+              </span>
+            ),
+          },
+        ),
+        columnHelper.accessor((row) => getCostEfficiency(row) ?? undefined, {
+          id: "efficiency",
+          header: ({ column }) => (
+            <SortableHeader align="right" column={column} label="Efficiency" />
+          ),
+          sortDescFirst: true,
+          sortUndefined: "last",
+          cell: ({ row }) => (
+            <span className="block text-right tabular-nums">
+              {formatCostEfficiency(getCostEfficiency(row.original))}
+            </span>
+          ),
+        }),
+        columnHelper.accessor(
+          (row) =>
+            row.mean_output_tokens !== null &&
+            Number.isFinite(row.mean_output_tokens)
+              ? row.mean_output_tokens
+              : undefined,
+          {
+            id: "outputTokens",
+            header: ({ column }) => (
+              <SortableHeader align="right" column={column} label="Out tok" />
+            ),
+            sortDescFirst: true,
+            sortUndefined: "last",
+            cell: ({ row }) => (
+              <span className="block text-right tabular-nums">
+                {formatCompactNumber(row.original.mean_output_tokens)}
+              </span>
+            ),
+          },
+        ),
+        columnHelper.accessor(
+          (row) =>
+            row.mean_agent_steps !== null &&
+            Number.isFinite(row.mean_agent_steps)
+              ? row.mean_agent_steps
+              : undefined,
+          {
+            id: "steps",
+            header: ({ column }) => (
+              <SortableHeader align="right" column={column} label="Steps" />
+            ),
+            sortDescFirst: true,
+            sortUndefined: "last",
+            cell: ({ row }) => (
+              <span className="block text-right tabular-nums">
+                {formatCompactNumber(row.original.mean_agent_steps)}
+              </span>
+            ),
+          },
+        ),
+      ]),
+    [activeSelectedConfig, handleConfigSelect, scoreAxisMaximum],
+  );
+
+  const table = useTable({
+    columns,
+    data: visibleRows,
+    enableMultiSort: false,
+    enableSortingRemoval: false,
+    features: tableFeaturesConfig,
+    getRowId: (row) => row.config,
+    initialState: { sorting: [{ id: "score", desc: true }] },
+  });
+
   const handleRankingModeChange = (nextMode: RankingMode): void => {
     setRankingMode(nextMode);
     setSelectedConfig(null);
     onConfigSelect?.(null);
-  };
-
-  /**
-   * Changes the metric used to order rows.
-   *
-   * @param nextMetric - Ranking metric to apply.
-   */
-  const handleRankingMetricChange = (nextMetric: RankingMetric): void => {
-    setRankingMetric(nextMetric);
-  };
-
-  /**
-   * Toggles the selected leaderboard configuration.
-   *
-   * @param config - Configuration identifier.
-   */
-  const handleConfigSelect = (config: string): void => {
-    const nextConfig = activeSelectedConfig === config ? null : config;
-
-    setSelectedConfig(nextConfig);
-    onConfigSelect?.(nextConfig);
   };
 
   return (
@@ -595,61 +538,79 @@ export const DeepSwePerformanceRankingChart = ({
         >
           Model ranking
         </h3>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <ToggleFilter
-            label="Ranking detail"
-            onChange={handleRankingModeChange}
-            options={RANKING_MODE_OPTIONS}
-            value={rankingMode}
-          />
-
-          <div className="flex items-center gap-2">
-            <span className="text-sm">Sort by:</span>
-            <ToggleFilter
-              label="Ranking metric"
-              onChange={handleRankingMetricChange}
-              options={RANKING_METRIC_OPTIONS}
-              value={rankingMetric}
-            />
-            <span aria-hidden="true" className="text-sm">
-              ↓
-            </span>
-          </div>
-        </div>
+        <ToggleFilter
+          label="Ranking detail"
+          onChange={handleRankingModeChange}
+          options={RANKING_MODE_OPTIONS}
+          value={rankingMode}
+        />
       </div>
 
-      <div className="border-border bg-card rounded-md border px-3 py-2 lg:px-4 lg:py-3">
-        <div className="text-muted-foreground hidden grid-cols-[minmax(170px,1fr)_minmax(240px,2fr)_5rem_6rem_5rem_4rem] gap-4 border-b px-3 pb-2 text-xs font-medium lg:grid">
-          <span>Model</span>
-          <span>Pass@1</span>
-          <span className="text-right">Avg cost</span>
-          <span className="text-right">Efficiency</span>
-          <span className="text-right">Out tok</span>
-          <span className="text-right">Steps</span>
-        </div>
-
-        {visibleRows.length === 0 ? (
-          <div className="text-muted-foreground flex min-h-36 flex-col items-center justify-center gap-3 px-4 text-center text-sm">
-            <p>No configurations are selected.</p>
-          </div>
-        ) : (
-          <div className="divide-border divide-y">
-            {visibleRows.map((row) => (
-              <RankingRow
-                axisMaximum={scoreAxisMaximum}
-                isSelected={activeSelectedConfig === row.config}
-                key={row.config}
-                onSelect={handleConfigSelect}
-                row={row}
-              />
+      <div className="border-border bg-card rounded-md border">
+        <Table className="min-w-256">
+          <TableCaption className="sr-only">
+            DeepSWE configurations. Activate a column header to change the sort.
+          </TableCaption>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead
+                    aria-sort={getAriaSort(header.column.getIsSorted())}
+                    key={header.id}
+                  >
+                    {header.isPlaceholder ? null : (
+                      <table.FlexRender header={header} />
+                    )}
+                  </TableHead>
+                ))}
+              </TableRow>
             ))}
-          </div>
-        )}
-
-        {visibleRows.length > 0 ? (
-          <ScoreAxis maximum={scoreAxisMaximum} ticks={scoreTicks} />
-        ) : null}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  className="text-muted-foreground h-36 text-center"
+                  colSpan={columns.length}
+                >
+                  No configurations are selected.
+                </TableCell>
+              </TableRow>
+            ) : (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  data-state={
+                    activeSelectedConfig === row.original.config
+                      ? "selected"
+                      : undefined
+                  }
+                  key={row.id}
+                >
+                  {row.getAllCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      <table.FlexRender cell={cell} />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+          {table.getRowModel().rows.length > 0 ? (
+            <TableFooter>
+              <TableRow>
+                <TableCell />
+                <TableCell>
+                  <div className="flex min-w-64 gap-3">
+                    <ScoreAxis maximum={scoreAxisMaximum} ticks={scoreTicks} />
+                    <div className="w-16" />
+                  </div>
+                </TableCell>
+                <TableCell colSpan={4} />
+              </TableRow>
+            </TableFooter>
+          ) : null}
+        </Table>
       </div>
     </section>
   );

@@ -22,10 +22,14 @@ source components live in:
 
 - Prefer `const` arrow functions for components, hooks, event handlers, and
   utilities. Do not introduce `function` declarations for these symbols.
-- Add JSDoc to every exported component, hook, utility, and public prop shape.
-  Document parameters, return values, controlled/uncontrolled behavior,
-  defaults, and important accessibility expectations. Use `@typedef` for
-  reusable prop objects where helpful.
+- Add JSDoc to every exported component, hook, utility, and public prop type.
+  Document its purpose, parameters, return value, defaults, controlled and
+  uncontrolled behavior, and any important accessibility requirements. Use
+  `@typedef` for reusable prop objects when it improves clarity.
+- Keep each JSDoc block concise and place it immediately above the declaration
+  it documents. Group consecutive parameters, props, and options without blank
+  comment lines between them. Include a focused example for exported utilities
+  when it clarifies their behavior, and a short usage example for each hook.
 - Keep component APIs small and composable. Prefer `children`, renderable
   slots, callbacks, and standard DOM props over hard-coded content.
 - Preserve semantic HTML, keyboard behavior, focus management, ARIA

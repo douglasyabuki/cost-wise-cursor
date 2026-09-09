@@ -14,11 +14,6 @@ export type FrontierCodeSubset = "main" | "extended";
 export type FrontierCodeRankingMode = "best" | "all";
 
 /**
- * Metric used to order FrontierCode ranking rows.
- */
-export type FrontierCodeRankingMetric = "score" | "costEfficiency";
-
-/**
  * One raw FrontierCode result for a model, effort, and task subset.
  */
 export interface FrontierCodeResult {

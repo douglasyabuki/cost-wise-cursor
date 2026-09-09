@@ -1,13 +1,75 @@
-/**
- * Rendered SVG coordinates supplied to a custom Recharts scatter line.
- * Missing or non-finite coordinates are ignored during hit testing.
- */
-export interface ScatterLinePoint {
-  cx?: number | null;
-  cy?: number | null;
-  x?: number | null;
-  y?: number | null;
+const CHART_LABEL_REFERENCE_WIDTH = 1_200;
+
+interface ChartPointTitleTarget<TDatum> {
+  datum: TDatum;
+  key: string;
 }
+
+/**
+ * Adds native SVG titles to chart points after the chart renderer mounts them.
+ *
+ * @param svg - Mounted SVG chart surface.
+ * @param points - Rendered chart points and their stable scene keys.
+ * @param getTitle - Creates the title text for each point datum.
+ * @returns Nothing; the SVG point nodes are updated in place.
+ * @example
+ * setChartPointTitles(svg, scene.points, (point) => `${point.model} · ${point.effort}`);
+ */
+export const setChartPointTitles = <TDatum>(
+  svg: SVGSVGElement,
+  points: readonly ChartPointTitleTarget<TDatum>[],
+  getTitle: (datum: TDatum) => string,
+): void => {
+  const nodesByKey = new Map<string, SVGElement>();
+
+  svg.querySelectorAll<SVGElement>("[data-ts-key]").forEach((node) => {
+    const key = node.dataset.tsKey;
+
+    if (key !== undefined) {
+      nodesByKey.set(key, node);
+    }
+  });
+
+  points.forEach((point) => {
+    const node =
+      nodesByKey.get(point.key) ?? nodesByKey.get(`${point.key}:dot`);
+
+    if (node === undefined) {
+      return;
+    }
+
+    const title =
+      Array.from(node.children).find((child) => child.localName === "title") ??
+      svg.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "title");
+
+    if (title.parentElement === null) {
+      node.prepend(title);
+    }
+
+    title.textContent = getTitle(point.datum);
+  });
+};
+
+/**
+ * Scales a chart label against its measured surface width.
+ *
+ * The maximum preserves the desktop size, while the minimum keeps labels
+ * readable on genuinely narrow screens and at high browser zoom levels.
+ *
+ * @param width - Measured chart-surface width in CSS pixels.
+ * @param minimumSize - Smallest permitted font size in CSS pixels.
+ * @param maximumSize - Font size used at the reference width and above.
+ * @returns A responsive font size between the supplied limits.
+ */
+export const getResponsiveChartLabelFontSize = (
+  width: number,
+  minimumSize: number,
+  maximumSize: number,
+): number =>
+  Math.min(
+    maximumSize,
+    Math.max(minimumSize, (width / CHART_LABEL_REFERENCE_WIDTH) * maximumSize),
+  );
 
 /**
  * Formats a dollar value for a compact cost-axis tick.
@@ -26,66 +88,3 @@ export const formatCostAxisTick = (value: number): string =>
  */
 export const formatChartPercentage = (value: number): string =>
   `${value.toFixed(2)}%`;
-
-/**
- * Pointer position in viewport pixels and the SVG element receiving the event.
- */
-interface LinePointerEvent {
-  clientX: number;
-  clientY: number;
-  currentTarget: SVGGraphicsElement;
-}
-
-/**
- * Finds the configuration nearest to the pointer on a model's rendered line.
- * Compares viewport pixels so SVG transforms and different axis units do not
- * distort the distance. Equal distances retain the first point in series order.
- *
- * @param event - Mouse position and the line's SVG group.
- * @param points - Rendered line points supplied by Recharts.
- * @param configurations - Configurations in the same order as the line points.
- * @param fallbackConfig - Selection when geometry is unavailable; callers also
- * use this configuration for keyboard interaction without a pointer position.
- * @returns Nearest configuration, or the supplied fallback.
- */
-export const getNearestLineConfig = (
-  event: LinePointerEvent,
-  points: readonly ScatterLinePoint[] | undefined,
-  configurations: readonly { config: string }[],
-  fallbackConfig: string,
-): string => {
-  const transform = event.currentTarget.getScreenCTM();
-
-  if (!transform) return fallbackConfig;
-
-  let nearestConfig = fallbackConfig;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-
-  points?.forEach((point, index) => {
-    const x = point.x ?? point.cx;
-    const y = point.y ?? point.cy;
-    const config = configurations[index]?.config;
-
-    if (
-      typeof x !== "number" ||
-      typeof y !== "number" ||
-      !Number.isFinite(x) ||
-      !Number.isFinite(y) ||
-      config === undefined
-    ) {
-      return;
-    }
-
-    const screenX = transform.a * x + transform.c * y + transform.e;
-    const screenY = transform.b * x + transform.d * y + transform.f;
-    const distance =
-      (screenX - event.clientX) ** 2 + (screenY - event.clientY) ** 2;
-
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearestConfig = config;
-    }
-  });
-
-  return nearestConfig;
-};
