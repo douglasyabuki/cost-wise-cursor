@@ -1,16 +1,9 @@
-import {
-  type ChartRenderContext,
-  defineChart,
-  dot,
-  lineY,
-  text,
-  whenFocused,
-} from "@tanstack/charts";
+import { defineChart, dot, lineY, text, whenFocused } from "@tanstack/charts";
 import { focusGuideX } from "@tanstack/charts/focus/guide";
 import { decorative } from "@tanstack/charts/mark/decorative";
 import { Chart } from "@tanstack/charts/react";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
-import { type ReactElement, useCallback, useMemo } from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 
 import type {
   DeepSweLeaderboard,
@@ -20,9 +13,10 @@ import type {
   EfficiencyMetric,
 } from "@/types-and-constants/deep-swe";
 import {
+  createChartPointSvgRenderer,
   formatChartPercentage,
+  getMutedChartColor,
   getResponsiveChartLabelFontSize,
-  setChartPointTitles,
 } from "@/utils/chart";
 import { formatLongDate } from "@/utils/date";
 import {
@@ -35,9 +29,15 @@ import {
   getReasoningEffortOrder,
 } from "@/utils/deep-swe";
 
+import { ModelChartContextMenu } from "./model-chart-context-menu";
+
 interface DeepSweEfficiencyChartProps {
   leaderboard: DeepSweLeaderboard;
   metric: EfficiencyMetric;
+  /** Removes one model configuration from the selected configs. */
+  onRemoveConfig: (config: string) => void;
+  /** Removes every configuration for one model from the selected configs. */
+  onRemoveModel: (model: string) => void;
   rows: readonly DeepSweLeaderboardRow[];
   /** Whether every visible point should display its model and effort labels. */
   showAllPointLabels: boolean;
@@ -214,20 +214,31 @@ const getMetricAxis = (series: readonly ChartSeries[]): MetricAxis => {
 const DeepSweEfficiencyChartContent = ({
   leaderboard,
   metric,
+  onRemoveConfig,
+  onRemoveModel,
   rows,
   showAllPointLabels,
   showModelLines,
 }: DeepSweEfficiencyChartContentProps): ReactElement => {
+  const [activeModel, setActiveModel] = useState<string | null>(null);
   const series = useMemo(() => createChartSeries(rows, metric), [metric, rows]);
-  const handleChartRender = useCallback(
-    ({ scene, svg }: ChartRenderContext<ChartPoint, number, number>) => {
-      setChartPointTitles(
-        svg,
-        scene.points,
+  const handleFocusChange = useCallback(
+    (point: { datum: ChartPoint } | null): void => {
+      setActiveModel(point?.datum.model ?? null);
+    },
+    [],
+  );
+  const renderSvg = useMemo(
+    () =>
+      createChartPointSvgRenderer<ChartPoint>(
         (point) =>
           `${point.model} · ${point.effort} effort · ${formatChartPercentage(point.score)} score · ${formatMetricValue(metric, point.metricValue)}`,
-      );
-    },
+        (point) => ({
+          config: point.config,
+          level: point.effort,
+          model: point.model,
+        }),
+      ),
     [metric],
   );
   const definition = useMemo(() => {
@@ -241,16 +252,6 @@ const DeepSweEfficiencyChartContent = ({
     const hoveredLevelPoints = points.filter(
       (point) => !showAllPointLabels && !point.isLabelAnchor,
     );
-    const dimUnrelatedModel = {
-      when: ({
-        datum,
-        focus,
-      }: {
-        datum: ChartPoint;
-        focus: { primary: { datum: ChartPoint } | null };
-      }) => focus.primary !== null && focus.primary.datum.model !== datum.model,
-      style: { opacity: 0.55 },
-    } as const;
     const interactionMark = showModelLines
       ? lineY(points, {
           id: "configurations",
@@ -261,7 +262,6 @@ const DeepSweEfficiencyChartContent = ({
           key: "config",
           points: true,
           strokeWidth: 2.5,
-          states: [dimUnrelatedModel],
         })
       : dot(points, {
           id: "configurations",
@@ -272,13 +272,35 @@ const DeepSweEfficiencyChartContent = ({
           key: "config",
           r: 4,
           states: [
-            dimUnrelatedModel,
             {
               when: { focus: "primary" },
               style: { r: 6, stroke: "var(--background)", strokeWidth: 2 },
             },
           ],
         });
+    const focusedInteractionMark = whenFocused(
+      showModelLines
+        ? lineY(points, {
+            id: "focused-configurations",
+            x: "metricValue",
+            y: "score",
+            z: "model",
+            color: "model",
+            key: "config",
+            points: true,
+            strokeWidth: 2.5,
+          })
+        : dot(points, {
+            id: "focused-configurations",
+            x: "metricValue",
+            y: "score",
+            z: "model",
+            color: "model",
+            key: "config",
+            r: 4,
+          }),
+      { match: "series" },
+    );
 
     const hoveredLevelLabel =
       hoveredLevelPoints.length > 0
@@ -287,6 +309,7 @@ const DeepSweEfficiencyChartContent = ({
               id: "hovered-effort-label",
               x: "metricValue",
               y: "score",
+              z: "model",
               text: (point) => point.effort.toUpperCase(),
               color: "model",
               key: (point) => `${point.config}-hovered-effort`,
@@ -342,6 +365,11 @@ const DeepSweEfficiencyChartContent = ({
     return defineChart({
       focus: "nearest",
       keyboard: true,
+      svgAnimation: {
+        duration: 150,
+        easing: "ease-out",
+        respectReducedMotion: true,
+      },
       chart: ({ width }) => ({
         marks: [
           interactionMark,
@@ -350,6 +378,7 @@ const DeepSweEfficiencyChartContent = ({
               id: "model-labels",
               x: "metricValue",
               y: "score",
+              z: "model",
               text: "model",
               color: "model",
               key: (point) => `${point.config}-model`,
@@ -363,12 +392,43 @@ const DeepSweEfficiencyChartContent = ({
               id: "effort-labels",
               x: "metricValue",
               y: "score",
+              z: "model",
               text: (point) => point.effort.toUpperCase(),
               color: "model",
               key: (point) => `${point.config}-effort`,
               dy: -7,
               fontSize: getResponsiveChartLabelFontSize(width, 6, 9),
             }),
+          ),
+          focusedInteractionMark,
+          whenFocused(
+            text(labelPoints, {
+              id: "focused-model-labels",
+              x: "metricValue",
+              y: "score",
+              z: "model",
+              text: "model",
+              color: "model",
+              key: (point) => `${point.config}-focused-model`,
+              dy: -18,
+              fontSize: getResponsiveChartLabelFontSize(width, 8, 12),
+              fontWeight: 600,
+            }),
+            { match: "series" },
+          ),
+          whenFocused(
+            text(labelPoints, {
+              id: "focused-effort-labels",
+              x: "metricValue",
+              y: "score",
+              z: "model",
+              text: (point) => point.effort.toUpperCase(),
+              color: "model",
+              key: (point) => `${point.config}-focused-effort`,
+              dy: -7,
+              fontSize: getResponsiveChartLabelFontSize(width, 6, 9),
+            }),
+            { match: "series" },
           ),
           ...(hoveredLevelLabel === null ? [] : [hoveredLevelLabel]),
           projection,
@@ -405,7 +465,11 @@ const DeepSweEfficiencyChartContent = ({
         },
         color: {
           domain: series.map((item) => item.model),
-          range: series.map((item) => item.color),
+          range: series.map((item) =>
+            activeModel !== null && activeModel !== item.model
+              ? getMutedChartColor(item.color)
+              : item.color,
+          ),
         },
         theme: {
           foreground: "var(--muted-foreground)",
@@ -414,7 +478,7 @@ const DeepSweEfficiencyChartContent = ({
         margin: { top: 56, right: 76, bottom: 52, left: 56 },
       }),
     });
-  }, [metric, series, showAllPointLabels, showModelLines]);
+  }, [activeModel, metric, series, showAllPointLabels, showModelLines]);
   const lastJobDate = formatLongDate(
     leaderboard.latest_job?.finished_at ?? leaderboard.generated_at,
   );
@@ -453,15 +517,21 @@ const DeepSweEfficiencyChartContent = ({
             No data is available for the selected configurations and metric.
           </div>
         ) : (
-          <Chart
-            ariaDescription="Higher scores and lower metric values indicate stronger efficiency."
-            ariaLabel={`DeepSWE score by ${getMetricAxisLabel(metric)}`}
-            className="w-full"
-            definition={definition}
-            height={680}
-            initialWidth={960}
-            onRender={handleChartRender}
-          />
+          <ModelChartContextMenu
+            onRemoveConfig={onRemoveConfig}
+            onRemoveModel={onRemoveModel}
+          >
+            <Chart
+              ariaDescription="Higher scores and lower metric values indicate stronger efficiency."
+              ariaLabel={`DeepSWE score by ${getMetricAxisLabel(metric)}`}
+              className="w-full [&_[data-ts-focus-layer]]:pointer-events-none [&_path]:pointer-events-none [&_text]:pointer-events-none"
+              definition={definition}
+              height={680}
+              initialWidth={960}
+              onFocusChange={handleFocusChange}
+              renderSvg={renderSvg}
+            />
+          </ModelChartContextMenu>
         )}
       </div>
     </section>
@@ -477,6 +547,8 @@ const DeepSweEfficiencyChartContent = ({
 export const DeepSweEfficiencyChart = ({
   leaderboard,
   metric,
+  onRemoveConfig,
+  onRemoveModel,
   rows,
   showAllPointLabels,
   showModelLines,
@@ -486,6 +558,8 @@ export const DeepSweEfficiencyChart = ({
     key={`${version}-${metric}`}
     leaderboard={leaderboard}
     metric={metric}
+    onRemoveConfig={onRemoveConfig}
+    onRemoveModel={onRemoveModel}
     rows={rows}
     showAllPointLabels={showAllPointLabels}
     showModelLines={showModelLines}

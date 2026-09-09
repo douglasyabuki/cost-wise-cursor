@@ -573,6 +573,22 @@ export const DeepSweLeaderboardDashboard = ({
     });
   };
 
+  /** Removes one configuration from the active selection. */
+  const handleRemoveConfig = (config: string): void => {
+    updateExcludedConfigs((current) => new Set(current).add(config));
+  };
+
+  /** Removes every configuration for a model from the active selection. */
+  const handleRemoveModel = (model: string): void => {
+    updateExcludedConfigs((current) => {
+      const next = new Set(current);
+      matchedRows.forEach((row) => {
+        if (row.model === model) next.add(row.config);
+      });
+      return next;
+    });
+  };
+
   /**
    * Replaces the active selection with an exact set of configurations.
    */
@@ -663,6 +679,8 @@ export const DeepSweLeaderboardDashboard = ({
         key={`${version}-${metric}-${hiddenConfigKey}`}
         leaderboard={leaderboard}
         metric={metric}
+        onRemoveConfig={handleRemoveConfig}
+        onRemoveModel={handleRemoveModel}
         rows={visibleRows}
         showAllPointLabels={showMoreEfficientOnly}
         showModelLines={!showMoreEfficientOnly}

@@ -1,54 +1,79 @@
-const CHART_LABEL_REFERENCE_WIDTH = 1_200;
+import { type ChartSvgRenderer, renderChartSvg } from "@tanstack/charts";
 
-interface ChartPointTitleTarget<TDatum> {
-  datum: TDatum;
-  key: string;
+const CHART_LABEL_REFERENCE_WIDTH = 1_200;
+const HEX_COLOR_PATTERN = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i;
+
+interface ChartPointContextMetadata {
+  config: string;
+  level: string;
+  model: string;
 }
 
+/** Escapes text before inserting it into serialized SVG markup. */
+const escapeSvgText = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+
 /**
- * Adds native SVG titles to chart points after the chart renderer mounts them.
+ * Desaturates a hexadecimal chart color and reduces its opacity.
  *
- * @param svg - Mounted SVG chart surface.
- * @param points - Rendered chart points and their stable scene keys.
- * @param getTitle - Creates the title text for each point datum.
- * @returns Nothing; the SVG point nodes are updated in place.
+ * @param color - Six-digit hexadecimal source color.
+ * @param opacity - Resulting opacity, defaulting to the chart focus treatment.
+ * @returns A grayscale CSS color, or a neutral fallback for unsupported input.
  * @example
- * setChartPointTitles(svg, scene.points, (point) => `${point.model} · ${point.effort}`);
+ * getMutedChartColor("#22c55e") // "rgb(155 155 155 / 55%)"
  */
-export const setChartPointTitles = <TDatum>(
-  svg: SVGSVGElement,
-  points: readonly ChartPointTitleTarget<TDatum>[],
-  getTitle: (datum: TDatum) => string,
-): void => {
-  const nodesByKey = new Map<string, SVGElement>();
+export const getMutedChartColor = (color: string, opacity = 0.55): string => {
+  const match = HEX_COLOR_PATTERN.exec(color);
 
-  svg.querySelectorAll<SVGElement>("[data-ts-key]").forEach((node) => {
-    const key = node.dataset.tsKey;
+  if (match === null) {
+    return `rgb(128 128 128 / ${opacity * 100}%)`;
+  }
 
-    if (key !== undefined) {
-      nodesByKey.set(key, node);
-    }
-  });
+  const red = Number.parseInt(match[1] ?? "0", 16);
+  const green = Number.parseInt(match[2] ?? "0", 16);
+  const blue = Number.parseInt(match[3] ?? "0", 16);
+  const gray = Math.round(red * 0.2126 + green * 0.7152 + blue * 0.0722);
 
-  points.forEach((point) => {
-    const node =
-      nodesByKey.get(point.key) ?? nodesByKey.get(`${point.key}:dot`);
-
-    if (node === undefined) {
-      return;
-    }
-
-    const title =
-      Array.from(node.children).find((child) => child.localName === "title") ??
-      svg.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "title");
-
-    if (title.parentElement === null) {
-      node.prepend(title);
-    }
-
-    title.textContent = getTitle(point.datum);
-  });
+  return `rgb(${gray} ${gray} ${gray} / ${opacity * 100}%)`;
 };
+
+/**
+ * Creates an SVG renderer whose point titles and menu targets survive focus redraws.
+ * @param getTitle - Returns the native hover title for a point.
+ * @param getMetadata - Returns the point's configuration, model, and level.
+ * @returns A renderer for the Chart renderSvg prop, including static rendering.
+ */
+export const createChartPointSvgRenderer =
+  <TDatum>(
+    getTitle: (datum: TDatum) => string,
+    getMetadata: (datum: TDatum) => ChartPointContextMetadata,
+  ): ChartSvgRenderer<TDatum, number, number> =>
+  (scene, options) => {
+    const pointsByKey = new Map(
+      scene.points.flatMap((point) => [
+        [escapeSvgText(point.key), point] as const,
+        [escapeSvgText(`${point.key}:dot`), point] as const,
+      ]),
+    );
+
+    // Serialize metadata on every paint: post-render DOM edits are removed by
+    // TanStack's SVG reconciliation when pointer or keyboard focus changes.
+    return renderChartSvg(scene, options).replace(
+      /<circle\b([^>]*?)\s*\/>/g,
+      (markup: string, attributes: string) => {
+        const key = /data-ts-key="([^"]*)"/.exec(attributes)?.[1];
+        const point = key === undefined ? undefined : pointsByKey.get(key);
+        if (point === undefined) return markup;
+
+        const metadata = getMetadata(point.datum);
+        return `<circle${attributes} data-model-context-config="${escapeSvgText(metadata.config)}" data-model-context-level="${escapeSvgText(metadata.level)}" data-model-context-model="${escapeSvgText(metadata.model)}"><title>${escapeSvgText(getTitle(point.datum))}</title></circle>`;
+      },
+    );
+  };
 
 /**
  * Scales a chart label against its measured surface width.

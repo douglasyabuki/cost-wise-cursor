@@ -1,23 +1,17 @@
-import {
-  type ChartRenderContext,
-  defineChart,
-  dot,
-  lineY,
-  text,
-  whenFocused,
-} from "@tanstack/charts";
+import { defineChart, dot, lineY, text, whenFocused } from "@tanstack/charts";
 import { focusGuideX } from "@tanstack/charts/focus/guide";
 import { decorative } from "@tanstack/charts/mark/decorative";
 import { Chart } from "@tanstack/charts/react";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
-import { type ReactElement, useCallback, useMemo } from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 
 import type { FrontierCodeLeaderboardRow } from "@/types-and-constants/frontier-code";
 import {
+  createChartPointSvgRenderer,
   formatChartPercentage,
   formatCostAxisTick,
+  getMutedChartColor,
   getResponsiveChartLabelFontSize,
-  setChartPointTitles,
 } from "@/utils/chart";
 import { getModelColor } from "@/utils/deep-swe";
 import {
@@ -25,8 +19,14 @@ import {
   getFrontierCodeReasoningEffortOrder,
 } from "@/utils/frontier-code";
 
+import { ModelChartContextMenu } from "./model-chart-context-menu";
+
 /** Public properties for the FrontierCode score-versus-cost chart. */
 export interface FrontierCodeComparisonChartProps {
+  /** Removes one model configuration from the selected configs. */
+  onRemoveConfig: (config: string) => void;
+  /** Removes every configuration for one model from the selected configs. */
+  onRemoveModel: (model: string) => void;
   rows: readonly FrontierCodeLeaderboardRow[];
   /** Whether every visible point should display its model and effort labels. */
   showAllPointLabels: boolean;
@@ -168,20 +168,31 @@ const getCostAxis = (series: readonly ChartSeries[]): CostAxis => {
  * @returns Interactive FrontierCode comparison visualization.
  */
 export const FrontierCodeComparisonChart = ({
+  onRemoveConfig,
+  onRemoveModel,
   rows,
   showAllPointLabels,
   showModelLines,
 }: FrontierCodeComparisonChartProps): ReactElement => {
+  const [activeModel, setActiveModel] = useState<string | null>(null);
   const series = useMemo(() => createChartSeries(rows), [rows]);
-  const handleChartRender = useCallback(
-    ({ scene, svg }: ChartRenderContext<ChartPoint, number, number>) => {
-      setChartPointTitles(
-        svg,
-        scene.points,
+  const handleFocusChange = useCallback(
+    (point: { datum: ChartPoint } | null): void => {
+      setActiveModel(point?.datum.model ?? null);
+    },
+    [],
+  );
+  const renderSvg = useMemo(
+    () =>
+      createChartPointSvgRenderer<ChartPoint>(
         (point) =>
           `${point.model} · ${point.effort} effort · ${formatChartPercentage(point.score)} score · ${formatFrontierCodeCost(point.cost)} benchmark cost`,
-      );
-    },
+        (point) => ({
+          config: point.config,
+          level: point.effort,
+          model: point.model,
+        }),
+      ),
     [],
   );
   const definition = useMemo(() => {
@@ -195,16 +206,6 @@ export const FrontierCodeComparisonChart = ({
     const hoveredLevelPoints = points.filter(
       (point) => !showAllPointLabels && !point.isLabelAnchor,
     );
-    const dimUnrelatedModel = {
-      when: ({
-        datum,
-        focus,
-      }: {
-        datum: ChartPoint;
-        focus: { primary: { datum: ChartPoint } | null };
-      }) => focus.primary !== null && focus.primary.datum.model !== datum.model,
-      style: { opacity: 0.55 },
-    } as const;
     const interactionMark = showModelLines
       ? lineY(points, {
           id: "configurations",
@@ -215,7 +216,6 @@ export const FrontierCodeComparisonChart = ({
           key: "config",
           points: true,
           strokeWidth: 2.5,
-          states: [dimUnrelatedModel],
         })
       : dot(points, {
           id: "configurations",
@@ -226,13 +226,35 @@ export const FrontierCodeComparisonChart = ({
           key: "config",
           r: 4,
           states: [
-            dimUnrelatedModel,
             {
               when: { focus: "primary" },
               style: { r: 6, stroke: "var(--background)", strokeWidth: 2 },
             },
           ],
         });
+    const focusedInteractionMark = whenFocused(
+      showModelLines
+        ? lineY(points, {
+            id: "focused-configurations",
+            x: "cost",
+            y: "score",
+            z: "model",
+            color: "model",
+            key: "config",
+            points: true,
+            strokeWidth: 2.5,
+          })
+        : dot(points, {
+            id: "focused-configurations",
+            x: "cost",
+            y: "score",
+            z: "model",
+            color: "model",
+            key: "config",
+            r: 4,
+          }),
+      { match: "series" },
+    );
 
     const hoveredLevelLabel =
       hoveredLevelPoints.length > 0
@@ -241,6 +263,7 @@ export const FrontierCodeComparisonChart = ({
               id: "hovered-effort-label",
               x: "cost",
               y: "score",
+              z: "model",
               text: (point) => point.effort.toUpperCase(),
               color: "model",
               key: (point) => `${point.config}-hovered-effort`,
@@ -295,6 +318,11 @@ export const FrontierCodeComparisonChart = ({
     return defineChart({
       focus: "nearest",
       keyboard: true,
+      svgAnimation: {
+        duration: 150,
+        easing: "ease-out",
+        respectReducedMotion: true,
+      },
       chart: ({ width }) => ({
         marks: [
           interactionMark,
@@ -303,6 +331,7 @@ export const FrontierCodeComparisonChart = ({
               id: "model-labels",
               x: "cost",
               y: "score",
+              z: "model",
               text: "model",
               color: "model",
               key: (point) => `${point.config}-model`,
@@ -316,12 +345,43 @@ export const FrontierCodeComparisonChart = ({
               id: "effort-labels",
               x: "cost",
               y: "score",
+              z: "model",
               text: (point) => point.effort.toUpperCase(),
               color: "model",
               key: (point) => `${point.config}-effort`,
               dy: -7,
               fontSize: getResponsiveChartLabelFontSize(width, 6, 9),
             }),
+          ),
+          focusedInteractionMark,
+          whenFocused(
+            text(labelPoints, {
+              id: "focused-model-labels",
+              x: "cost",
+              y: "score",
+              z: "model",
+              text: "model",
+              color: "model",
+              key: (point) => `${point.config}-focused-model`,
+              dy: -18,
+              fontSize: getResponsiveChartLabelFontSize(width, 8, 12),
+              fontWeight: 600,
+            }),
+            { match: "series" },
+          ),
+          whenFocused(
+            text(labelPoints, {
+              id: "focused-effort-labels",
+              x: "cost",
+              y: "score",
+              z: "model",
+              text: (point) => point.effort.toUpperCase(),
+              color: "model",
+              key: (point) => `${point.config}-focused-effort`,
+              dy: -7,
+              fontSize: getResponsiveChartLabelFontSize(width, 6, 9),
+            }),
+            { match: "series" },
           ),
           ...(hoveredLevelLabel === null ? [] : [hoveredLevelLabel]),
           projection,
@@ -358,7 +418,11 @@ export const FrontierCodeComparisonChart = ({
         },
         color: {
           domain: series.map((item) => item.model),
-          range: series.map((item) => item.color),
+          range: series.map((item) =>
+            activeModel !== null && activeModel !== item.model
+              ? getMutedChartColor(item.color)
+              : item.color,
+          ),
         },
         theme: {
           foreground: "var(--muted-foreground)",
@@ -367,7 +431,7 @@ export const FrontierCodeComparisonChart = ({
         margin: { top: 56, right: 76, bottom: 52, left: 56 },
       }),
     });
-  }, [series, showAllPointLabels, showModelLines]);
+  }, [activeModel, series, showAllPointLabels, showModelLines]);
 
   return (
     <section
@@ -395,15 +459,21 @@ export const FrontierCodeComparisonChart = ({
             No data is available for the selected configurations.
           </div>
         ) : (
-          <Chart
-            ariaDescription="Higher scores and lower benchmark costs indicate stronger value."
-            ariaLabel="FrontierCode score by benchmark cost"
-            className="w-full"
-            definition={definition}
-            height={680}
-            initialWidth={960}
-            onRender={handleChartRender}
-          />
+          <ModelChartContextMenu
+            onRemoveConfig={onRemoveConfig}
+            onRemoveModel={onRemoveModel}
+          >
+            <Chart
+              ariaDescription="Higher scores and lower benchmark costs indicate stronger value."
+              ariaLabel="FrontierCode score by benchmark cost"
+              className="w-full [&_[data-ts-focus-layer]]:pointer-events-none [&_path]:pointer-events-none [&_text]:pointer-events-none"
+              definition={definition}
+              height={680}
+              initialWidth={960}
+              onFocusChange={handleFocusChange}
+              renderSvg={renderSvg}
+            />
+          </ModelChartContextMenu>
         )}
       </div>
     </section>
