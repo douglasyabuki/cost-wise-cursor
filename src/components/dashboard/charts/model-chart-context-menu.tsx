@@ -1,4 +1,9 @@
-import { CircleMinusIcon, Trash2Icon } from "lucide-react";
+import {
+  CircleMinusIcon,
+  CirclePlusIcon,
+  ListPlusIcon,
+  Trash2Icon,
+} from "lucide-react";
 import {
   type MouseEvent,
   type ReactElement,
@@ -17,27 +22,151 @@ import {
 } from "@/components/ui/context-menu";
 
 interface ModelChartContextTarget {
+  kind: "dot";
+  config: string;
+  level: string;
+  model: string;
+}
+
+interface ModelChartLineContextTarget {
+  kind: "line";
+  model: string;
+  visibleConfigs: ReadonlySet<string>;
+}
+
+interface ModelChartContextConfig {
   config: string;
   level: string;
   model: string;
 }
 
 interface ModelChartContextMenuProps {
+  availableConfigs: readonly ModelChartContextConfig[];
   children: ReactNode;
+  onAddConfig: (config: string) => void;
+  onAddModel: (model: string) => void;
   onRemoveConfig: (config: string) => void;
   onRemoveModel: (model: string) => void;
+}
+
+type ResolvedModelChartContextTarget =
+  ModelChartContextTarget | ModelChartLineContextTarget;
+
+interface ScreenPoint {
+  x: number;
+  y: number;
 }
 
 type PreventableChartEvent<TEvent> = TEvent & {
   preventBaseUIHandler?: () => void;
 };
 
-/** Resolves the closest base dot within eight CSS pixels of the actual press. */
+/** Returns the distance from a point to a line segment. */
+const getDistanceToSegment = (
+  point: ScreenPoint,
+  start: ScreenPoint,
+  end: ScreenPoint,
+): number => {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+
+  if (lengthSquared === 0) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const projection = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * deltaX + (point.y - start.y) * deltaY) /
+        lengthSquared,
+    ),
+  );
+  return Math.hypot(
+    point.x - (start.x + projection * deltaX),
+    point.y - (start.y + projection * deltaY),
+  );
+};
+
+/** Resolves a screen-space point for an SVG path sample. */
+const getScreenPoint = (
+  point: DOMPoint,
+  transform: DOMMatrix,
+): ScreenPoint => ({
+  x: point.x * transform.a + point.y * transform.c + transform.e,
+  y: point.x * transform.b + point.y * transform.d + transform.f,
+});
+
+/** Measures the closest distance from the actual press to a rendered line. */
+const getDistanceToPath = (
+  path: SVGPathElement,
+  clientX: number,
+  clientY: number,
+): number => {
+  const bounds = path.getBoundingClientRect();
+  const distanceToBounds = Math.max(
+    bounds.left - clientX,
+    clientX - bounds.right,
+    bounds.top - clientY,
+    clientY - bounds.bottom,
+    0,
+  );
+  if (distanceToBounds > 12) return Number.POSITIVE_INFINITY;
+
+  const transform = path.getScreenCTM();
+  const length = path.getTotalLength();
+  if (transform === null || length === 0) return distanceToBounds;
+
+  const sampleCount = Math.max(1, Math.ceil(length / 12));
+  const target = { x: clientX, y: clientY };
+  let closestDistance = Number.POSITIVE_INFINITY;
+  let previous = getScreenPoint(path.getPointAtLength(0), transform);
+
+  for (let index = 1; index <= sampleCount; index += 1) {
+    const current = getScreenPoint(
+      path.getPointAtLength((length * index) / sampleCount),
+      transform,
+    );
+    closestDistance = Math.min(
+      closestDistance,
+      getDistanceToSegment(target, previous, current),
+    );
+    previous = current;
+  }
+
+  return closestDistance;
+};
+
+/** Returns the model and visible configs represented by a rendered line. */
+const getLineContextTarget = (
+  path: SVGPathElement,
+): ModelChartLineContextTarget | null => {
+  const line = path.closest<SVGGElement>("g.ts-chart__line");
+  if (line === null || line.closest("[data-ts-focus-layer]")) return null;
+
+  const model = line
+    .querySelector<SVGCircleElement>("circle[data-model-context-model]")
+    ?.getAttribute("data-model-context-model");
+  if (!model) return null;
+
+  const visibleConfigs = new Set<string>();
+  line
+    .querySelectorAll<SVGCircleElement>("circle[data-model-context-config]")
+    .forEach((circle) => {
+      const config = circle.getAttribute("data-model-context-config");
+      if (config) visibleConfigs.add(config);
+    });
+
+  return { kind: "line", model, visibleConfigs };
+};
+
+/** Resolves the closest dot or line to the actual press. */
 const getContextTarget = (
   container: HTMLDivElement,
   clientX: number,
   clientY: number,
-): ModelChartContextTarget | null => {
+): ResolvedModelChartContextTarget | null => {
   let closest: SVGCircleElement | null = null;
   let closestDistance = Number.POSITIVE_INFINITY;
 
@@ -66,7 +195,26 @@ const getContextTarget = (
   const level = element?.getAttribute("data-model-context-level");
   const model = element?.getAttribute("data-model-context-model");
 
-  return config && level && model ? { config, level, model } : null;
+  if (config && level && model) {
+    return { kind: "dot", config, level, model };
+  }
+
+  let closestLine: ModelChartLineContextTarget | null = null;
+  let closestLineDistance = Number.POSITIVE_INFINITY;
+  for (const path of container.querySelectorAll<SVGPathElement>(
+    "g.ts-chart__line path",
+  )) {
+    const nextLine = getLineContextTarget(path);
+    if (nextLine === null) continue;
+
+    const distance = getDistanceToPath(path, clientX, clientY);
+    if (distance <= 10 && distance < closestLineDistance) {
+      closestLine = nextLine;
+      closestLineDistance = distance;
+    }
+  }
+
+  return closestLine;
 };
 
 /**
@@ -76,12 +224,23 @@ const getContextTarget = (
  * @returns A chart wrapper that opens a contextual removal menu on a model mark.
  */
 export const ModelChartContextMenu = ({
+  availableConfigs,
   children,
+  onAddConfig,
+  onAddModel,
   onRemoveConfig,
   onRemoveModel,
 }: ModelChartContextMenuProps): ReactElement => {
   const [contextTarget, setContextTarget] =
-    useState<ModelChartContextTarget | null>(null);
+    useState<ResolvedModelChartContextTarget | null>(null);
+  const missingConfigs =
+    contextTarget?.kind === "line"
+      ? availableConfigs.filter(
+          (config) =>
+            config.model === contextTarget.model &&
+            !contextTarget.visibleConfigs.has(config.config),
+        )
+      : [];
 
   const handleContextMenu = (
     event: PreventableChartEvent<MouseEvent<HTMLDivElement>>,
@@ -123,7 +282,38 @@ export const ModelChartContextMenu = ({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
-        {contextTarget === null ? null : (
+        {contextTarget === null ? null : contextTarget.kind === "line" ? (
+          <ContextMenuGroup>
+            <ContextMenuLabel
+              className="max-w-72 truncate"
+              title={contextTarget.model}
+            >
+              {contextTarget.model}
+            </ContextMenuLabel>
+            {missingConfigs.map((config) => (
+              <ContextMenuItem
+                key={config.config}
+                onClick={() => onAddConfig(config.config)}
+              >
+                <CirclePlusIcon />
+                Add {config.level} level
+              </ContextMenuItem>
+            ))}
+            {missingConfigs.length > 0 ? (
+              <ContextMenuItem onClick={() => onAddModel(contextTarget.model)}>
+                <ListPlusIcon />
+                Add model (all levels)
+              </ContextMenuItem>
+            ) : null}
+            <ContextMenuItem
+              onClick={() => onRemoveModel(contextTarget.model)}
+              variant="destructive"
+            >
+              <Trash2Icon />
+              Remove model (all levels)
+            </ContextMenuItem>
+          </ContextMenuGroup>
+        ) : (
           <ContextMenuGroup>
             <ContextMenuLabel
               className="max-w-72 truncate"

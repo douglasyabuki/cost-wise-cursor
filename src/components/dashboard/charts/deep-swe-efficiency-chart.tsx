@@ -32,8 +32,14 @@ import {
 import { ModelChartContextMenu } from "./model-chart-context-menu";
 
 interface DeepSweEfficiencyChartProps {
+  /** All matched configurations available for the active benchmark version. */
+  availableRows: readonly DeepSweLeaderboardRow[];
   leaderboard: DeepSweLeaderboard;
   metric: EfficiencyMetric;
+  /** Adds one model configuration to the selected configs. */
+  onAddConfig: (config: string) => void;
+  /** Adds every configuration for one model to the selected configs. */
+  onAddModel: (model: string) => void;
   /** Removes one model configuration from the selected configs. */
   onRemoveConfig: (config: string) => void;
   /** Removes every configuration for one model from the selected configs. */
@@ -212,8 +218,11 @@ const getMetricAxis = (series: readonly ChartSeries[]): MetricAxis => {
 
 /** Renders the stateful TanStack Charts host. */
 const DeepSweEfficiencyChartContent = ({
+  availableRows,
   leaderboard,
   metric,
+  onAddConfig,
+  onAddModel,
   onRemoveConfig,
   onRemoveModel,
   rows,
@@ -222,6 +231,15 @@ const DeepSweEfficiencyChartContent = ({
 }: DeepSweEfficiencyChartContentProps): ReactElement => {
   const [activeModel, setActiveModel] = useState<string | null>(null);
   const series = useMemo(() => createChartSeries(rows, metric), [metric, rows]);
+  const availableConfigs = useMemo(
+    () =>
+      availableRows.map((row) => ({
+        config: row.config,
+        level: getReasoningEffort(row),
+        model: row.model,
+      })),
+    [availableRows],
+  );
   const handleFocusChange = useCallback(
     (point: { datum: ChartPoint } | null): void => {
       setActiveModel(point?.datum.model ?? null);
@@ -518,13 +536,16 @@ const DeepSweEfficiencyChartContent = ({
           </div>
         ) : (
           <ModelChartContextMenu
+            availableConfigs={availableConfigs}
+            onAddConfig={onAddConfig}
+            onAddModel={onAddModel}
             onRemoveConfig={onRemoveConfig}
             onRemoveModel={onRemoveModel}
           >
             <Chart
               ariaDescription="Higher scores and lower metric values indicate stronger efficiency."
               ariaLabel={`DeepSWE score by ${getMetricAxisLabel(metric)}`}
-              className="w-full [&_[data-ts-focus-layer]]:pointer-events-none [&_path]:pointer-events-none [&_text]:pointer-events-none"
+              className="w-full **:data-ts-focus-layer:pointer-events-none [&_path]:pointer-events-none [&_text]:pointer-events-none"
               definition={definition}
               height={680}
               initialWidth={960}
@@ -545,8 +566,11 @@ const DeepSweEfficiencyChartContent = ({
  * @returns Interactive score-versus-efficiency visualization.
  */
 export const DeepSweEfficiencyChart = ({
+  availableRows,
   leaderboard,
   metric,
+  onAddConfig,
+  onAddModel,
   onRemoveConfig,
   onRemoveModel,
   rows,
@@ -556,8 +580,11 @@ export const DeepSweEfficiencyChart = ({
 }: DeepSweEfficiencyChartProps): ReactElement => (
   <DeepSweEfficiencyChartContent
     key={`${version}-${metric}`}
+    availableRows={availableRows}
     leaderboard={leaderboard}
     metric={metric}
+    onAddConfig={onAddConfig}
+    onAddModel={onAddModel}
     onRemoveConfig={onRemoveConfig}
     onRemoveModel={onRemoveModel}
     rows={rows}

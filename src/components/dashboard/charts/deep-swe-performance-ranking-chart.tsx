@@ -547,7 +547,7 @@ export const DeepSwePerformanceRankingChart = ({
       </div>
 
       <div className="border-border bg-card rounded-md border">
-        <Table className="min-w-256">
+        <Table className="min-w-5xl">
           <TableCaption className="sr-only">
             DeepSWE configurations. Activate a column header to change the sort.
           </TableCaption>

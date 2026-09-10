@@ -23,6 +23,12 @@ import { ModelChartContextMenu } from "./model-chart-context-menu";
 
 /** Public properties for the FrontierCode score-versus-cost chart. */
 export interface FrontierCodeComparisonChartProps {
+  /** All matched configurations available for the active benchmark selection. */
+  availableRows: readonly FrontierCodeLeaderboardRow[];
+  /** Adds one model configuration to the selected configs. */
+  onAddConfig: (config: string) => void;
+  /** Adds every configuration for one model to the selected configs. */
+  onAddModel: (model: string) => void;
   /** Removes one model configuration from the selected configs. */
   onRemoveConfig: (config: string) => void;
   /** Removes every configuration for one model from the selected configs. */
@@ -168,6 +174,9 @@ const getCostAxis = (series: readonly ChartSeries[]): CostAxis => {
  * @returns Interactive FrontierCode comparison visualization.
  */
 export const FrontierCodeComparisonChart = ({
+  availableRows,
+  onAddConfig,
+  onAddModel,
   onRemoveConfig,
   onRemoveModel,
   rows,
@@ -176,6 +185,15 @@ export const FrontierCodeComparisonChart = ({
 }: FrontierCodeComparisonChartProps): ReactElement => {
   const [activeModel, setActiveModel] = useState<string | null>(null);
   const series = useMemo(() => createChartSeries(rows), [rows]);
+  const availableConfigs = useMemo(
+    () =>
+      availableRows.map((row) => ({
+        config: row.config,
+        level: row.reasoning_effort,
+        model: row.model,
+      })),
+    [availableRows],
+  );
   const handleFocusChange = useCallback(
     (point: { datum: ChartPoint } | null): void => {
       setActiveModel(point?.datum.model ?? null);
@@ -460,13 +478,16 @@ export const FrontierCodeComparisonChart = ({
           </div>
         ) : (
           <ModelChartContextMenu
+            availableConfigs={availableConfigs}
+            onAddConfig={onAddConfig}
+            onAddModel={onAddModel}
             onRemoveConfig={onRemoveConfig}
             onRemoveModel={onRemoveModel}
           >
             <Chart
               ariaDescription="Higher scores and lower benchmark costs indicate stronger value."
               ariaLabel="FrontierCode score by benchmark cost"
-              className="w-full [&_[data-ts-focus-layer]]:pointer-events-none [&_path]:pointer-events-none [&_text]:pointer-events-none"
+              className="w-full **:data-ts-focus-layer:pointer-events-none [&_path]:pointer-events-none [&_text]:pointer-events-none"
               definition={definition}
               height={680}
               initialWidth={960}

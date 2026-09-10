@@ -577,6 +577,26 @@ export const FrontierCodeLeaderboardDashboard = ({
     updateExcludedConfigs((current) => new Set(current).add(config));
   };
 
+  /** Adds one configuration back to the active selection. */
+  const handleAddConfig = (config: string): void => {
+    updateExcludedConfigs((current) => {
+      const next = new Set(current);
+      next.delete(config);
+      return next;
+    });
+  };
+
+  /** Adds every configuration for a model back to the active selection. */
+  const handleAddModel = (model: string): void => {
+    updateExcludedConfigs((current) => {
+      const next = new Set(current);
+      matchedRows.forEach((row) => {
+        if (row.model === model) next.delete(row.config);
+      });
+      return next;
+    });
+  };
+
   /** Removes every configuration for a model from the active selection. */
   const handleRemoveModel = (model: string): void => {
     updateExcludedConfigs((current) => {
@@ -680,7 +700,10 @@ export const FrontierCodeLeaderboardDashboard = ({
       </div>
 
       <FrontierCodeComparisonChart
+        availableRows={matchedRows}
         key={`${version}-${subset}-comparison-${hiddenConfigKey}`}
+        onAddConfig={handleAddConfig}
+        onAddModel={handleAddModel}
         onRemoveConfig={handleRemoveConfig}
         onRemoveModel={handleRemoveModel}
         rows={visibleRows}
