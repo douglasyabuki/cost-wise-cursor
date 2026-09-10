@@ -1,6 +1,7 @@
 import { ChevronDown, SearchIcon, X } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
+import type { BenchmarkChangelog as BenchmarkChangelogData } from "@/components/dashboard/benchmark-changelog";
 import { ModelEfficiencyToggle } from "@/components/dashboard/model-efficiency-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,11 @@ import {
 import { DeepSweEfficiencyChart } from "./charts/deep-swe-efficiency-chart";
 import { DeepSwePerformanceRankingChart } from "./charts/deep-swe-performance-ranking-chart";
 
+/**
+ * Public properties for the DeepSWE dashboard.
+ */
 export interface DeepSweLeaderboardDashboardProps {
+  changelog?: BenchmarkChangelogData;
   cursorModelPrices?: readonly CursorModelPrice[];
   leaderboard: DeepSweLeaderboard;
   version: DeepSweVersion;
@@ -437,6 +442,7 @@ const ConfigFilter = ({
  * Coordinates shared configuration filters for both leaderboard views.
  */
 export const DeepSweLeaderboardDashboard = ({
+  changelog,
   cursorModelPrices,
   leaderboard,
   version,
@@ -697,8 +703,8 @@ export const DeepSweLeaderboardDashboard = ({
 
       <DeepSweEfficiencyChart
         availableRows={matchedRows}
+        changelog={changelog}
         key={`${version}-${metric}-${hiddenConfigKey}`}
-        leaderboard={leaderboard}
         metric={metric}
         onAddConfig={handleAddConfig}
         onAddModel={handleAddModel}

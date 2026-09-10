@@ -136,7 +136,11 @@ export const HomePage = () => {
     useState<FrontierCodeSubset>("main");
 
   const deepSweQuery = useQuery(DeepSweService.getLeaderboard(deepSweVersion));
+  const deepSweChangelogQuery = useQuery(DeepSweService.getChangelog());
   const frontierCodeQuery = useQuery(FrontierCodeService.getLeaderboard());
+  const frontierCodeChangelogQuery = useQuery(
+    FrontierCodeService.getChangelog(),
+  );
   const cursorQuery = useQuery(CursorService.getModelPrices());
 
   return (
@@ -279,6 +283,7 @@ export const HomePage = () => {
             {deepSweQuery.isSuccess && (
               <DeepSweLeaderboardDashboard
                 cursorModelPrices={cursorQuery.data}
+                changelog={deepSweChangelogQuery.data}
                 leaderboard={deepSweQuery.data}
                 onVersionChange={setDeepSweVersion}
                 version={deepSweVersion}
@@ -354,6 +359,7 @@ export const HomePage = () => {
             {frontierCodeQuery.isSuccess && (
               <FrontierCodeLeaderboardDashboard
                 cursorModelPrices={cursorQuery.data}
+                changelog={frontierCodeChangelogQuery.data}
                 leaderboard={frontierCodeQuery.data}
                 onSubsetChange={setFrontierCodeSubset}
                 onVersionChange={setFrontierCodeVersion}

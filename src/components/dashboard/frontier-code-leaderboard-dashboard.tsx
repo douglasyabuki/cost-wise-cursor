@@ -1,6 +1,7 @@
 import { ChevronDown, SearchIcon, X } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
+import type { BenchmarkChangelog as BenchmarkChangelogData } from "@/components/dashboard/benchmark-changelog";
 import { ModelEfficiencyToggle } from "@/components/dashboard/model-efficiency-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ import { FrontierCodePerformanceRankingChart } from "./charts/frontier-code-perf
  * Public properties for the FrontierCode dashboard.
  */
 export interface FrontierCodeLeaderboardDashboardProps {
+  changelog?: BenchmarkChangelogData;
   cursorModelPrices?: readonly CursorModelPrice[];
   leaderboard: FrontierCodeLeaderboard;
   version: FrontierCodeVersion;
@@ -431,6 +433,7 @@ const ConfigFilter = ({
  * @returns FrontierCode controls and visualizations.
  */
 export const FrontierCodeLeaderboardDashboard = ({
+  changelog,
   cursorModelPrices,
   leaderboard,
   onSubsetChange,
@@ -701,6 +704,7 @@ export const FrontierCodeLeaderboardDashboard = ({
 
       <FrontierCodeComparisonChart
         availableRows={matchedRows}
+        changelog={changelog}
         key={`${version}-${subset}-comparison-${hiddenConfigKey}`}
         onAddConfig={handleAddConfig}
         onAddModel={handleAddModel}

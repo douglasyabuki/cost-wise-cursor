@@ -60,6 +60,15 @@ const isElementBefore = (element: Element, reference: Element): boolean =>
   );
 
 /**
+ * Checks whether a list item is a leaf item rather than a nested-list wrapper.
+ *
+ * @param item - List item to inspect.
+ * @returns Whether the item contains no nested list content.
+ */
+const isLeafListItem = (item: Element): boolean =>
+  item.tagName === "LI" && !item.querySelector("ul, ol");
+
+/**
  * Checks the minimum expected structure of a leaderboard row.
  *
  * @param value - Value to inspect.
@@ -152,7 +161,9 @@ export const parseDeepSweChangelog = (html: string): DeepSweChangelog => {
     throw new Error("DeepSWE returned an invalid changelog response");
   }
 
-  const listItems = Array.from(document.querySelectorAll("li"));
+  const listItems = Array.from(document.querySelectorAll("li")).filter(
+    isLeafListItem,
+  );
   const changelog = dateHeadings.map((dateHeading, dateIndex) => {
     const dateHeadingPosition = headings.indexOf(dateHeading);
     const dateLevel = Number(dateHeading.tagName.slice(1));

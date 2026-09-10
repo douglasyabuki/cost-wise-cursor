@@ -5,6 +5,10 @@ import { Chart } from "@tanstack/charts/react";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 
+import {
+  BenchmarkChangelog,
+  type BenchmarkChangelog as BenchmarkChangelogData,
+} from "@/components/dashboard/benchmark-changelog";
 import type { FrontierCodeLeaderboardRow } from "@/types-and-constants/frontier-code";
 import {
   createChartPointSvgRenderer,
@@ -25,6 +29,8 @@ import { ModelChartContextMenu } from "./model-chart-context-menu";
 export interface FrontierCodeComparisonChartProps {
   /** All matched configurations available for the active benchmark selection. */
   availableRows: readonly FrontierCodeLeaderboardRow[];
+  /** Complete changelog data returned by the benchmark service. */
+  changelog?: BenchmarkChangelogData;
   /** Adds one model configuration to the selected configs. */
   onAddConfig: (config: string) => void;
   /** Adds every configuration for one model to the selected configs. */
@@ -175,6 +181,7 @@ const getCostAxis = (series: readonly ChartSeries[]): CostAxis => {
  */
 export const FrontierCodeComparisonChart = ({
   availableRows,
+  changelog,
   onAddConfig,
   onAddModel,
   onRemoveConfig,
@@ -456,16 +463,19 @@ export const FrontierCodeComparisonChart = ({
       aria-labelledby="frontier-code-comparison-title"
       className="flex flex-col gap-3"
     >
-      <div className="min-w-0">
-        <h3
-          className="text-lg leading-tight font-semibold tracking-tight"
-          id="frontier-code-comparison-title"
-        >
-          Score versus benchmark cost
-        </h3>
-        <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-6">
-          Higher scores and lower costs indicate stronger value.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3
+            className="text-lg leading-tight font-semibold tracking-tight"
+            id="frontier-code-comparison-title"
+          >
+            Score versus benchmark cost
+          </h3>
+          <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-6">
+            Higher scores and lower costs indicate stronger value.
+          </p>
+        </div>
+        <BenchmarkChangelog changelog={changelog} />
       </div>
 
       <div className="bg-card relative min-w-0 overflow-hidden rounded-md border">

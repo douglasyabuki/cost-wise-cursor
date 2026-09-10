@@ -5,8 +5,11 @@ import { Chart } from "@tanstack/charts/react";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 
+import {
+  BenchmarkChangelog,
+  type BenchmarkChangelog as BenchmarkChangelogData,
+} from "@/components/dashboard/benchmark-changelog";
 import type {
-  DeepSweLeaderboard,
   DeepSweLeaderboardRow,
   DeepSweReasoningEffort,
   DeepSweVersion,
@@ -18,7 +21,6 @@ import {
   getMutedChartColor,
   getResponsiveChartLabelFontSize,
 } from "@/utils/chart";
-import { formatLongDate } from "@/utils/date";
 import {
   formatMetricTick,
   formatMetricValue,
@@ -34,7 +36,8 @@ import { ModelChartContextMenu } from "./model-chart-context-menu";
 interface DeepSweEfficiencyChartProps {
   /** All matched configurations available for the active benchmark version. */
   availableRows: readonly DeepSweLeaderboardRow[];
-  leaderboard: DeepSweLeaderboard;
+  /** Complete changelog data returned by the benchmark service. */
+  changelog?: BenchmarkChangelogData;
   metric: EfficiencyMetric;
   /** Adds one model configuration to the selected configs. */
   onAddConfig: (config: string) => void;
@@ -219,7 +222,7 @@ const getMetricAxis = (series: readonly ChartSeries[]): MetricAxis => {
 /** Renders the stateful TanStack Charts host. */
 const DeepSweEfficiencyChartContent = ({
   availableRows,
-  leaderboard,
+  changelog,
   metric,
   onAddConfig,
   onAddModel,
@@ -497,10 +500,6 @@ const DeepSweEfficiencyChartContent = ({
       }),
     });
   }, [activeModel, metric, series, showAllPointLabels, showModelLines]);
-  const lastJobDate = formatLongDate(
-    leaderboard.latest_job?.finished_at ?? leaderboard.generated_at,
-  );
-
   return (
     <section
       aria-labelledby="deep-swe-efficiency-title"
@@ -518,12 +517,7 @@ const DeepSweEfficiencyChartContent = ({
             Compare benchmark score against cost, output tokens, or agent steps.
           </p>
         </div>
-        {lastJobDate ? (
-          <span className="text-muted-foreground hidden items-center gap-1 text-sm md:flex">
-            <span className="hidden lg:block">Last job executed on</span>
-            {lastJobDate}
-          </span>
-        ) : null}
+        <BenchmarkChangelog changelog={changelog} />
       </div>
 
       <div className="bg-card relative min-w-0 overflow-hidden rounded-md border">
@@ -567,7 +561,7 @@ const DeepSweEfficiencyChartContent = ({
  */
 export const DeepSweEfficiencyChart = ({
   availableRows,
-  leaderboard,
+  changelog,
   metric,
   onAddConfig,
   onAddModel,
@@ -581,7 +575,7 @@ export const DeepSweEfficiencyChart = ({
   <DeepSweEfficiencyChartContent
     key={`${version}-${metric}`}
     availableRows={availableRows}
-    leaderboard={leaderboard}
+    changelog={changelog}
     metric={metric}
     onAddConfig={onAddConfig}
     onAddModel={onAddModel}

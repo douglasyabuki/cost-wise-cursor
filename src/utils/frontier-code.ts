@@ -137,6 +137,15 @@ const getFrontierCodeCategory = (list: Element): string | null => {
 };
 
 /**
+ * Checks whether a list item is a leaf item rather than a nested-list wrapper.
+ *
+ * @param item - List item to inspect.
+ * @returns Whether the item contains no nested list content.
+ */
+const isFrontierCodeLeafListItem = (item: Element): boolean =>
+  item.tagName === "LI" && !item.querySelector("ul, ol");
+
+/**
  * Validates a raw FrontierCode result.
  *
  * @param value - Value to inspect.
@@ -279,7 +288,9 @@ export const parseFrontierCodeChangelog = (
     const date = getFrontierCodeEntryTextLeaves(entry).find(({ text }) =>
       FRONTIER_CODE_CHANGELOG_DATE_PATTERN.test(text),
     );
-    const lists = Array.from(entry.querySelectorAll("ul, ol"));
+    const lists = Array.from(entry.querySelectorAll("ul, ol")).filter((list) =>
+      Array.from(list.children).some(isFrontierCodeLeafListItem),
+    );
 
     if (!date || lists.length === 0) {
       throw new Error("FrontierCode returned an invalid changelog response");
@@ -288,7 +299,7 @@ export const parseFrontierCodeChangelog = (
     const sections = lists.map((list) => {
       const category = getFrontierCodeCategory(list);
       const items = Array.from(list.children)
-        .filter((item) => item.tagName === "LI")
+        .filter(isFrontierCodeLeafListItem)
         .map((item) => normalizeFrontierCodeHtmlText(item.textContent ?? ""))
         .filter((item) => item.length > 0);
 
