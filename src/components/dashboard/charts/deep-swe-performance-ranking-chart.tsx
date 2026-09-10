@@ -8,6 +8,8 @@ import {
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 
+import { ScoreAxis } from "@/components/dashboard/charts/score-axis";
+import { ScoreBar } from "@/components/dashboard/charts/score-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,16 +72,6 @@ interface SortableHeaderProps {
     toggleSorting: (descending?: boolean) => void;
   };
   label: string;
-}
-
-interface ScoreBarProps {
-  axisMaximum: number;
-  row: DeepSweLeaderboardRow;
-}
-
-interface ScoreAxisProps {
-  maximum: number;
-  ticks: readonly number[];
 }
 
 const RANKING_MODE_OPTIONS = [
@@ -272,64 +264,6 @@ const SortableHeader = ({
   );
 };
 
-/** Renders a score bar with its confidence-interval whisker. */
-const ScoreBar = ({ axisMaximum, row }: ScoreBarProps): ReactElement => {
-  const confidenceBounds = getConfidenceBounds(row);
-  const scorePosition = getAxisPosition(row.pass_at_1, axisMaximum);
-  const confidenceStart = getAxisPosition(confidenceBounds.lower, axisMaximum);
-  const confidenceEnd = getAxisPosition(confidenceBounds.upper, axisMaximum);
-  const color = getModelColor(row.model);
-
-  return (
-    <div aria-hidden="true" className="relative h-5 min-w-36 flex-1">
-      <div className="bg-muted/50 absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-sm" />
-      <div
-        className="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-sm transition-[width] duration-200"
-        style={{ backgroundColor: color, width: `${scorePosition}%` }}
-      />
-      <div
-        className="bg-foreground/80 absolute top-1/2 h-px -translate-y-1/2"
-        style={{
-          left: `${confidenceStart}%`,
-          width: `${Math.max(0, confidenceEnd - confidenceStart)}%`,
-        }}
-      >
-        <span className="bg-foreground/80 absolute top-1/2 left-0 h-2 w-px -translate-y-1/2" />
-        <span className="bg-foreground/80 absolute top-1/2 right-0 h-2 w-px -translate-y-1/2" />
-      </div>
-      <span
-        className="border-card absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
-        style={{ backgroundColor: color, left: `${scorePosition}%` }}
-      />
-    </div>
-  );
-};
-
-/** Renders the percentage guide beneath the score column. */
-const ScoreAxis = ({ maximum, ticks }: ScoreAxisProps): ReactElement => (
-  <div className="relative h-5 min-w-36 flex-1">
-    {ticks.map((tick) => {
-      const position = (tick / maximum) * 100;
-      const transform =
-        tick === 0
-          ? "translateX(0)"
-          : tick === maximum
-            ? "translateX(-100%)"
-            : "translateX(-50%)";
-
-      return (
-        <span
-          className="text-muted-foreground absolute top-0 text-[10px] tabular-nums"
-          key={tick}
-          style={{ left: `${position}%`, transform }}
-        >
-          {tick}%
-        </span>
-      );
-    })}
-  </div>
-);
-
 /**
  * Renders the DeepSWE performance ranking as a sortable semantic table.
  *
@@ -420,19 +354,37 @@ export const DeepSwePerformanceRankingChart = ({
             <SortableHeader column={column} label="Pass@1" />
           ),
           sortDescFirst: true,
-          cell: ({ row }) => (
-            <div className="flex min-w-64 items-center gap-3">
-              <ScoreBar axisMaximum={scoreAxisMaximum} row={row.original} />
-              <div className="w-16 text-right tabular-nums">
-                <div className="font-medium">
-                  {formatScore(row.original.pass_at_1)}
-                </div>
-                <div className="text-muted-foreground text-[10px]">
-                  {formatConfidence(row.original)}
+          cell: ({ row }) => {
+            const confidenceBounds = getConfidenceBounds(row.original);
+            return (
+              <div className="flex min-w-64 items-center gap-3">
+                <ScoreBar
+                  color={getModelColor(row.original.model)}
+                  confidenceBounds={confidenceBounds}
+                  confidenceEnd={getAxisPosition(
+                    confidenceBounds.upper,
+                    scoreAxisMaximum,
+                  )}
+                  confidenceStart={getAxisPosition(
+                    confidenceBounds.lower,
+                    scoreAxisMaximum,
+                  )}
+                  scorePosition={getAxisPosition(
+                    row.original.pass_at_1,
+                    scoreAxisMaximum,
+                  )}
+                />
+                <div className="w-16 text-right tabular-nums">
+                  <div className="font-medium">
+                    {formatScore(row.original.pass_at_1)}
+                  </div>
+                  <div className="text-muted-foreground text-[10px]">
+                    {formatConfidence(row.original)}
+                  </div>
                 </div>
               </div>
-            </div>
-          ),
+            );
+          },
         }),
         columnHelper.accessor(
           (row) =>

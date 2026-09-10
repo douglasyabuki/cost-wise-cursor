@@ -8,6 +8,8 @@ import {
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 
+import { ScoreAxis } from "@/components/dashboard/charts/score-axis";
+import { ScoreBar } from "@/components/dashboard/charts/score-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,16 +73,6 @@ interface SortableHeaderProps {
     toggleSorting: (descending?: boolean) => void;
   };
   label: string;
-}
-
-interface ScoreBarProps {
-  axisMaximum: number;
-  row: FrontierCodeLeaderboardRow;
-}
-
-interface ScoreAxisProps {
-  maximum: number;
-  ticks: readonly number[];
 }
 
 const RANKING_MODE_OPTIONS = [
@@ -234,50 +226,6 @@ const SortableHeader = ({
   );
 };
 
-/** Renders a score bar without confidence bounds. */
-const ScoreBar = ({ axisMaximum, row }: ScoreBarProps): ReactElement => {
-  const color = getModelColor(row.model);
-  const scorePosition = getAxisPosition(row.score, axisMaximum);
-
-  return (
-    <div aria-hidden="true" className="relative h-5 min-w-36 flex-1">
-      <div className="bg-muted/50 absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-sm" />
-      <div
-        className="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-sm transition-[width] duration-200"
-        style={{ backgroundColor: color, width: `${scorePosition}%` }}
-      />
-      <span
-        className="border-card absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
-        style={{ backgroundColor: color, left: `${scorePosition}%` }}
-      />
-    </div>
-  );
-};
-
-/** Renders the percentage guide beneath the score column. */
-const ScoreAxis = ({ maximum, ticks }: ScoreAxisProps): ReactElement => (
-  <div className="relative h-5 min-w-36 flex-1">
-    {ticks.map((tick) => {
-      const position = (tick / maximum) * 100;
-      const transform =
-        tick === 0
-          ? "translateX(0)"
-          : tick === maximum
-            ? "translateX(-100%)"
-            : "translateX(-50%)";
-      return (
-        <span
-          className="text-muted-foreground absolute top-0 text-[10px] tabular-nums"
-          key={tick}
-          style={{ left: `${position}%`, transform }}
-        >
-          {tick}%
-        </span>
-      );
-    })}
-  </div>
-);
-
 /**
  * Renders the FrontierCode performance ranking as a sortable semantic table.
  *
@@ -372,7 +320,13 @@ export const FrontierCodePerformanceRankingChart = ({
           sortDescFirst: true,
           cell: ({ row }) => (
             <div className="flex min-w-64 items-center gap-3">
-              <ScoreBar axisMaximum={scoreAxisMaximum} row={row.original} />
+              <ScoreBar
+                color={getModelColor(row.original.model)}
+                scorePosition={getAxisPosition(
+                  row.original.score,
+                  scoreAxisMaximum,
+                )}
+              />
               <span className="w-14 text-right font-medium tabular-nums">
                 {formatFrontierCodeScore(row.original.score)}
               </span>
