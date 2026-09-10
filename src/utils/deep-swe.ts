@@ -1,4 +1,5 @@
 import type {
+  DeepSweChangelog,
   DeepSweConfidenceBounds,
   DeepSweLeaderboard,
   DeepSweLeaderboardRow,
@@ -11,6 +12,9 @@ import {
 } from "@/types-and-constants/deep-swe";
 import { formatCostAxisTick } from "@/utils/chart";
 
+const DEEP_SWE_CHANGELOG_DATE_PATTERN =
+  /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}$/i;
+
 /**
  * Checks whether a value is a non-null object.
  *
@@ -19,6 +23,41 @@ import { formatCostAxisTick } from "@/utils/chart";
  */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+/**
+ * Normalizes text extracted from the upstream changelog HTML.
+ *
+ * @param value - Text content from the parsed document.
+ * @returns Trimmed text with internal whitespace collapsed.
+ */
+const normalizeDeepSweChangelogText = (value: string): string =>
+  value.replace(/\s+/g, " ").trim();
+
+/**
+ * Checks whether an element occurs after another element in document order.
+ *
+ * @param element - Element whose position is being checked.
+ * @param reference - Reference element in the document.
+ * @returns Whether the element occurs after the reference.
+ */
+const isElementAfter = (element: Element, reference: Element): boolean =>
+  Boolean(
+    element.compareDocumentPosition(reference) &
+    Node.DOCUMENT_POSITION_PRECEDING,
+  );
+
+/**
+ * Checks whether an element occurs before another element in document order.
+ *
+ * @param element - Element whose position is being checked.
+ * @param reference - Reference element in the document.
+ * @returns Whether the element occurs before the reference.
+ */
+const isElementBefore = (element: Element, reference: Element): boolean =>
+  Boolean(
+    element.compareDocumentPosition(reference) &
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
 
 /**
  * Checks the minimum expected structure of a leaderboard row.
@@ -58,6 +97,108 @@ export const parseDeepSweLeaderboard = (value: unknown): DeepSweLeaderboard => {
   }
 
   return value as unknown as DeepSweLeaderboard;
+};
+
+/**
+ * Parses the complete DeepSWE changelog from its HTML page.
+ *
+ * The parser reads date and category headings plus their list items as inert
+ * markup and returns only normalized text fields in source order.
+ *
+ * @param html - HTML document returned by DeepSWE.
+ * @returns Complete DeepSWE changelog history.
+ * @throws {Error} When the Changelog section or any entry is invalid.
+ */
+export const parseDeepSweChangelog = (html: string): DeepSweChangelog => {
+  if (typeof DOMParser === "undefined") {
+    throw new Error("DeepSWE changelog parsing is unavailable");
+  }
+
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const headings = Array.from(
+    document.querySelectorAll("h1, h2, h3, h4, h5, h6"),
+  );
+  const changelogHeading = headings.find(
+    (heading) =>
+      normalizeDeepSweChangelogText(heading.textContent ?? "").toLowerCase() ===
+      "changelog",
+  );
+
+  if (!changelogHeading) {
+    throw new Error("DeepSWE returned an invalid changelog response");
+  }
+
+  const changelogHeadingIndex = headings.indexOf(changelogHeading);
+  const changelogHeadingLevel = Number(changelogHeading.tagName.slice(1));
+  const nextSectionHeading = headings
+    .slice(changelogHeadingIndex + 1)
+    .find(
+      (heading) => Number(heading.tagName.slice(1)) <= changelogHeadingLevel,
+    );
+  const sectionHeadingsEnd = nextSectionHeading
+    ? headings.indexOf(nextSectionHeading)
+    : headings.length;
+  const sectionHeadings = headings.slice(
+    changelogHeadingIndex + 1,
+    sectionHeadingsEnd,
+  );
+  const dateHeadings = sectionHeadings.filter(({ textContent }) =>
+    DEEP_SWE_CHANGELOG_DATE_PATTERN.test(
+      normalizeDeepSweChangelogText(textContent ?? ""),
+    ),
+  );
+
+  if (dateHeadings.length === 0) {
+    throw new Error("DeepSWE returned an invalid changelog response");
+  }
+
+  const listItems = Array.from(document.querySelectorAll("li"));
+  const changelog = dateHeadings.map((dateHeading, dateIndex) => {
+    const dateHeadingPosition = headings.indexOf(dateHeading);
+    const dateLevel = Number(dateHeading.tagName.slice(1));
+    const nextDateHeading = dateHeadings[dateIndex + 1];
+    const dateEndHeading = nextDateHeading ?? nextSectionHeading;
+    const dateEndPosition = dateEndHeading
+      ? headings.indexOf(dateEndHeading)
+      : headings.length;
+    const categoryHeadings = headings
+      .slice(dateHeadingPosition + 1, dateEndPosition)
+      .filter((heading) => Number(heading.tagName.slice(1)) === dateLevel + 1);
+
+    if (categoryHeadings.length === 0) {
+      throw new Error("DeepSWE returned an invalid changelog response");
+    }
+
+    const sections = categoryHeadings.map((categoryHeading, categoryIndex) => {
+      const nextCategoryHeading = categoryHeadings[categoryIndex + 1];
+      const categoryEndHeading = nextCategoryHeading ?? dateEndHeading;
+      const items = listItems
+        .filter(
+          (item) =>
+            ["UL", "OL"].includes(item.parentElement?.tagName ?? "") &&
+            isElementAfter(item, categoryHeading) &&
+            (!categoryEndHeading || isElementBefore(item, categoryEndHeading)),
+        )
+        .map((item) => normalizeDeepSweChangelogText(item.textContent ?? ""))
+        .filter((item) => item.length > 0);
+      const category = normalizeDeepSweChangelogText(
+        categoryHeading.textContent ?? "",
+      );
+
+      if (!category || items.length === 0) {
+        throw new Error("DeepSWE returned an invalid changelog response");
+      }
+
+      return { category, items };
+    });
+
+    return {
+      date: normalizeDeepSweChangelogText(dateHeading.textContent ?? ""),
+      sections,
+    };
+  });
+
+  return changelog;
 };
 
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {

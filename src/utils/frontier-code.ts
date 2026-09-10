@@ -1,4 +1,5 @@
 import type {
+  FrontierCodeChangelog,
   FrontierCodeLeaderboard,
   FrontierCodeLeaderboardRow,
   FrontierCodeResult,
@@ -24,6 +25,9 @@ const FRONTIER_CODE_REASONING_EFFORT_ORDER = [
   "max",
 ] as const;
 
+const FRONTIER_CODE_CHANGELOG_DATE_PATTERN =
+  /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}$/i;
+
 const modelNameCollator = new Intl.Collator("en-US", {
   numeric: true,
   sensitivity: "base",
@@ -46,6 +50,91 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  */
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
+
+/**
+ * Normalizes text extracted from the upstream HTML document.
+ *
+ * @param value - Text content from the parsed document.
+ * @returns Trimmed text with internal whitespace collapsed.
+ */
+const normalizeFrontierCodeHtmlText = (value: string): string =>
+  value.replace(/\s+/g, " ").trim();
+
+/**
+ * Checks whether an element occurs after another element in document order.
+ *
+ * @param element - Element whose position is being checked.
+ * @param reference - Reference element in the document.
+ * @returns Whether the element occurs after the reference.
+ */
+const isFrontierCodeElementAfter = (
+  element: Element,
+  reference: Element,
+): boolean =>
+  !reference.contains(element) &&
+  Boolean(
+    element.compareDocumentPosition(reference) &
+    Node.DOCUMENT_POSITION_PRECEDING,
+  );
+
+/**
+ * Checks whether an element occurs before another element in document order.
+ *
+ * @param element - Element whose position is being checked.
+ * @param reference - Reference element in the document.
+ * @returns Whether the element occurs before the reference.
+ */
+const isFrontierCodeElementBefore = (
+  element: Element,
+  reference: Element,
+): boolean =>
+  Boolean(
+    element.compareDocumentPosition(reference) &
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+
+/**
+ * Returns the non-empty leaf elements within an entry.
+ *
+ * @param entry - Changelog entry element.
+ * @returns Leaf elements with normalized text content.
+ */
+const getFrontierCodeEntryTextLeaves = (
+  entry: Element,
+): Array<{ element: Element; text: string }> =>
+  Array.from(entry.querySelectorAll("*"))
+    .filter(
+      (element) =>
+        !element.querySelector("*") &&
+        !["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"].includes(element.tagName),
+    )
+    .map((element) => ({
+      element,
+      text: normalizeFrontierCodeHtmlText(element.textContent ?? ""),
+    }))
+    .filter(({ text }) => text.length > 0);
+
+/**
+ * Returns a category label that precedes a changelog list.
+ *
+ * @param list - List containing category update items.
+ * @returns Category text, or `null` when no label can be identified.
+ */
+const getFrontierCodeCategory = (list: Element): string | null => {
+  const parent = list.parentElement;
+
+  if (!parent) return null;
+
+  const label = Array.from(parent.children).find(
+    (child) =>
+      child !== list &&
+      isFrontierCodeElementBefore(child, list) &&
+      !child.querySelector("ul, ol, li") &&
+      normalizeFrontierCodeHtmlText(child.textContent ?? ""),
+  );
+
+  return label ? normalizeFrontierCodeHtmlText(label.textContent ?? "") : null;
+};
 
 /**
  * Validates a raw FrontierCode result.
@@ -144,6 +233,77 @@ export const parseFrontierCodeLeaderboard = (
     v1: value.v1,
     v1_1: value.v1_1,
   };
+};
+
+/**
+ * Parses the complete FrontierCode Changelog section.
+ *
+ * HTML is parsed as inert markup and only validated text fields are returned.
+ * The source is currently newest-first and groups lists by category within
+ * each dated entry.
+ *
+ * @param html - HTML document returned by Cognition.
+ * @returns Complete FrontierCode changelog history.
+ * @throws {Error} When the Changelog section or any entry is invalid.
+ */
+export const parseFrontierCodeChangelog = (
+  html: string,
+): FrontierCodeChangelog => {
+  if (typeof DOMParser === "undefined") {
+    throw new Error("FrontierCode changelog parsing is unavailable");
+  }
+
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const headings = Array.from(
+    document.querySelectorAll("h1, h2, h3, h4, h5, h6"),
+  );
+  const changelogHeading = headings.find(
+    (heading) =>
+      normalizeFrontierCodeHtmlText(heading.textContent ?? "").toLowerCase() ===
+      "changelog",
+  );
+
+  if (!changelogHeading) {
+    throw new Error("FrontierCode returned an invalid changelog response");
+  }
+
+  const changelogSection = Array.from(
+    document.querySelectorAll("section"),
+  ).find((section) => isFrontierCodeElementAfter(section, changelogHeading));
+
+  if (!changelogSection || changelogSection.children.length === 0) {
+    throw new Error("FrontierCode returned an invalid changelog response");
+  }
+
+  return Array.from(changelogSection.children).map((entry) => {
+    const date = getFrontierCodeEntryTextLeaves(entry).find(({ text }) =>
+      FRONTIER_CODE_CHANGELOG_DATE_PATTERN.test(text),
+    );
+    const lists = Array.from(entry.querySelectorAll("ul, ol"));
+
+    if (!date || lists.length === 0) {
+      throw new Error("FrontierCode returned an invalid changelog response");
+    }
+
+    const sections = lists.map((list) => {
+      const category = getFrontierCodeCategory(list);
+      const items = Array.from(list.children)
+        .filter((item) => item.tagName === "LI")
+        .map((item) => normalizeFrontierCodeHtmlText(item.textContent ?? ""))
+        .filter((item) => item.length > 0);
+
+      if (!category || items.length === 0) {
+        throw new Error("FrontierCode returned an invalid changelog response");
+      }
+
+      return { category, items };
+    });
+
+    return {
+      date: date.text,
+      sections,
+    };
+  });
 };
 
 /**

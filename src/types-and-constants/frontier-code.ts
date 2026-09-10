@@ -61,3 +61,24 @@ export interface FrontierCodeLeaderboardRow {
   cost: number;
   flagged_rate: number | null;
 }
+
+/**
+ * One category and its updates from a FrontierCode changelog date.
+ */
+export interface FrontierCodeChangelogSection {
+  category: string;
+  items: string[];
+}
+
+/**
+ * All updates published on one FrontierCode changelog date.
+ */
+export interface FrontierCodeChangelogEntry {
+  date: string;
+  sections: FrontierCodeChangelogSection[];
+}
+
+/**
+ * FrontierCode changelog history in the source's newest-first order.
+ */
+export type FrontierCodeChangelog = FrontierCodeChangelogEntry[];

@@ -115,3 +115,24 @@ export interface DeepSweLeaderboard {
   latest_job: DeepSweLatestJob | null;
   rows: DeepSweLeaderboardRow[];
 }
+
+/**
+ * One category and its updates from a DeepSWE changelog date.
+ */
+export interface DeepSweChangelogSection {
+  category: string;
+  items: string[];
+}
+
+/**
+ * All updates published on one DeepSWE changelog date.
+ */
+export interface DeepSweChangelogEntry {
+  date: string;
+  sections: DeepSweChangelogSection[];
+}
+
+/**
+ * DeepSWE changelog history in the source's newest-first order.
+ */
+export type DeepSweChangelog = DeepSweChangelogEntry[];

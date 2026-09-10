@@ -10,6 +10,10 @@
       "destination": "https://cognition.com/data/frontiercode-leaderboard/data.json"
     },
     {
+      "source": "/frontier-code/frontiercode",
+      "destination": "https://cognition.com/frontiercode"
+    },
+    {
       "source": "/cursor-docs/docs/models-and-pricing.md",
       "destination": "https://cursor.com/docs/models-and-pricing.md"
     }

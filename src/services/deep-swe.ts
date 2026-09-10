@@ -1,11 +1,15 @@
 import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 
 import type {
+  DeepSweChangelog,
   DeepSweLeaderboard,
   DeepSweVersion,
 } from "@/types-and-constants/deep-swe";
 import { request } from "@/utils/api";
-import { parseDeepSweLeaderboard } from "@/utils/deep-swe";
+import {
+  parseDeepSweChangelog,
+  parseDeepSweLeaderboard,
+} from "@/utils/deep-swe";
 
 const DEFAULT_DEEP_SWE_VERSION: DeepSweVersion = "v1";
 
@@ -15,6 +19,7 @@ const DEEP_SWE_LEADERBOARD_URLS = {
   "v1.1": "/deep-swe/artifacts/v1.1/leaderboard-live.json",
   v1: "/deep-swe/artifacts/v1/leaderboard-live.json",
 } as const satisfies Record<DeepSweVersion, string>;
+const DEEP_SWE_CHANGELOG_URL = "/deep-swe/changelog";
 
 /**
  * Parses and validates a DeepSWE leaderboard response.
@@ -27,6 +32,16 @@ const parseLeaderboardResponse = async (
   response: Response,
 ): Promise<DeepSweLeaderboard> =>
   parseDeepSweLeaderboard(await response.json());
+
+/**
+ * Parses a successful DeepSWE changelog response.
+ *
+ * @param response - Successful HTML response.
+ * @returns Complete DeepSWE changelog history.
+ */
+const parseChangelogResponse = async (
+  response: Response,
+): Promise<DeepSweChangelog> => parseDeepSweChangelog(await response.text());
 
 /**
  * Fetches a DeepSWE leaderboard.
@@ -61,6 +76,13 @@ export const deepSweQueryKeys = {
    */
   leaderboard: (version: DeepSweVersion = DEFAULT_DEEP_SWE_VERSION) =>
     [...DEEP_SWE_QUERY_ROOT, "leaderboard", version] as const,
+
+  /**
+   * Returns the stable query key for the complete changelog.
+   *
+   * @returns Stable TanStack Query key.
+   */
+  changelog: () => [...DEEP_SWE_QUERY_ROOT, "changelog"] as const,
 } as const;
 
 /**
@@ -83,6 +105,27 @@ export const DeepSweService = {
       placeholderData: keepPreviousData,
 
       staleTime: 15 * 60 * 1_000,
+      gcTime: 24 * 60 * 60 * 1_000,
+      retry: 2,
+    }),
+
+  /**
+   * Returns the query configuration for the complete DeepSWE changelog.
+   *
+   * @returns TanStack Query options for the changelog.
+   */
+  getChangelog: () =>
+    queryOptions({
+      queryKey: deepSweQueryKeys.changelog(),
+      queryFn: ({ signal }) =>
+        request<DeepSweChangelog>(DEEP_SWE_CHANGELOG_URL, {
+          signal,
+          headers: {
+            Accept: "text/html",
+          },
+          parse: parseChangelogResponse,
+        }),
+      staleTime: 60 * 60 * 1_000,
       gcTime: 24 * 60 * 60 * 1_000,
       retry: 2,
     }),
