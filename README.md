@@ -216,6 +216,36 @@ benchmark cost, cost efficiency, harness, and flagged rate when available.
 - Tailwind CSS
 - Vercel for deployment
 
+## Source organization
+
+```text
+src/components/
+├── ui/                         # Context-free shadcn components only
+├── logo-mark.tsx
+└── benchmarks/
+    ├── deep-swe/               # Dashboard, efficiency adapter, and ranking
+    ├── frontier-code/          # Dashboard, efficiency adapter, and ranking
+    ├── filters/                # Shared benchmark filters
+    ├── efficiency/             # Shared chart and model context menu
+    ├── ranking/                # Shared table, controls, score axis, and bars
+    └── benchmark-changelog.tsx
+```
+
+Benchmark-specific components prepare data and compose the shared benchmark UI.
+Custom application components stay outside `ui/`, even when multiple views reuse
+them. Benchmark-specific files retain their `deep-swe-` or `frontier-code-`
+prefixes so their ownership is clear in imports and editor tabs.
+
+State and event handlers live in the components that consume them. Shared pure
+grouping, ranking, and score-axis calculations live in
+`src/utils/performance-ranking.ts`; provider palettes and stable model colors
+live in `src/utils/model-colors.ts`. Benchmark parsing and formatting remain in
+their domain utilities under `src/utils/`.
+
+`src/pages/home.tsx` composes the benchmark tabs. Data fetching lives in
+`src/services/`, and shared data contracts and constants live in
+`src/types-and-constants/`.
+
 ## Running locally
 
 Requirements:

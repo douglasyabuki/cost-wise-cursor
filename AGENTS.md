@@ -13,10 +13,25 @@ Before editing files for a substantial task:
 
 ## Project purpose
 
-This Vite app is a transformation workspace for shadcn React components. The
-source components live in:
+Cost Wise Cursor is a Vite React app for comparing DeepSWE and FrontierCode
+benchmark performance and efficiency with Cursor model availability and pricing.
 
-- `src/components/ui/` — TypeScript shadcn components.
+## Component organization
+
+- Reserve `src/components/ui/` exclusively for context-free shadcn components.
+  Keep application-specific compositions and custom components outside it,
+  even when they are reusable.
+- Keep benchmark UI under `src/components/benchmarks/`:
+  - `deep-swe/` and `frontier-code/` own their dashboards, efficiency-chart
+    adapters, and performance rankings.
+  - `filters/`, `efficiency/`, and `ranking/` contain components shared across
+    benchmarks; `benchmark-changelog.tsx` sits at the benchmark root.
+- Keep benchmark-specific data preparation in the consuming benchmark component
+  or its domain utility. Shared filters receive prepared options and callbacks.
+- Keep shared pure ranking calculations in `src/utils/performance-ranking.ts`
+  and shared model colors in `src/utils/model-colors.ts`.
+- Keep nesting shallow and retain benchmark prefixes in benchmark-specific
+  filenames and component names.
 
 ## Conventions
 
@@ -36,6 +51,9 @@ source components live in:
   relationships, disabled states, and reduced-motion behavior from the source.
 - Keep state local unless the source component requires a controlled API.
   Avoid unnecessary effects and avoid duplicating derived state.
+- Prefer state and event handlers in the consuming component, with shared pure
+  calculations in `src/utils/`. Do not extract a custom hook merely to hide
+  ranking state or combine calculations; utilities must remain free of React hooks.
 - Use the `@/` alias for imports that resolve under `src/`.
 
 ## Skills guidance
