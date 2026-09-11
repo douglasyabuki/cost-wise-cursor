@@ -113,7 +113,7 @@ const DataSourceStatus = ({
       role="status"
       variant="secondary"
     >
-      <CircleCheck aria-hidden="true" className="text-[var(--color-success)]" />
+      <CircleCheck aria-hidden="true" className="text-(--color-success)" />
       <span>{label}</span>
     </Badge>
   );
@@ -181,7 +181,7 @@ export const HomePage = () => {
             return (
               <Button
                 aria-pressed={isSelected}
-                className="h-auto min-h-32 items-start justify-between gap-4 rounded-xl px-4 py-4 text-left whitespace-normal active:not-aria-[haspopup]:!translate-y-0"
+                className="h-auto min-h-32 items-start justify-between gap-4 rounded-xl px-4 py-4 text-left whitespace-normal active:not-aria-[haspopup]:translate-y-0!"
                 key={option.id}
                 onClick={() => setBenchmark(option.id)}
                 type="button"
