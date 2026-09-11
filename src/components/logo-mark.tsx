@@ -1,10 +1,12 @@
 import type { ComponentPropsWithoutRef } from "react";
 
+import CostWise from "@/assets/cost-wise.svg";
 import Cursor from "@/assets/cursor.svg";
 import DeepSwe from "@/assets/deep-swe.svg";
 import Frontier from "@/assets/frontier.svg";
 
 const logoMarks = {
+  "cost-wise": { src: CostWise, label: "Cost Wise" },
   cursor: { src: Cursor, label: "Cursor" },
   "deep-swe": { src: DeepSwe, label: "Deep SWE" },
   frontier: { src: Frontier, label: "Frontier" },

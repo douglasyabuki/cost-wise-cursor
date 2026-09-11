@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64" fill="none">
+  <title>Cost Wise Cursor</title>
+  <g stroke="#a1a1aa" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 14v38h40" stroke-width="4"/>
+    <g stroke-width="2">
+      <path d="M26 29h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-4m3-10v12"/>
+      <path d="M39 15h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-4m3-10v12"/>
+      <path d="M52 37h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-4m3-10v12"/>
+    </g>
+  </g>
+</svg>

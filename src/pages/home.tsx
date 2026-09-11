@@ -147,9 +147,12 @@ export const HomePage = () => {
     <div className="container">
       <div className="mb-10 flex flex-col gap-4 border-b pb-8 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-2xl">
-          <h1 className="text-3xl leading-tight font-semibold tracking-tight">
-            Cost Wise Cursor
-          </h1>
+          <div className="flex items-center gap-1">
+            <LogoMark name="cost-wise" className="size-10 object-contain" />
+            <h1 className="text-3xl leading-tight font-semibold tracking-tight">
+              Cost Wise Cursor
+            </h1>
+          </div>
           <p className="text-muted-foreground mt-2 text-sm leading-6 sm:text-base">
             Compare models available in Cursor across coding benchmarks, with
             performance, cost efficiency, and reasoning effort side by side.
