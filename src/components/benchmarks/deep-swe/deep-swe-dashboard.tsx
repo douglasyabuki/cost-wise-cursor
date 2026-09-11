@@ -1,28 +1,14 @@
-import { ChevronDown, SearchIcon, X } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
-import type { BenchmarkChangelog as BenchmarkChangelogData } from "@/components/dashboard/benchmark-changelog";
-import { ModelEfficiencyToggle } from "@/components/dashboard/model-efficiency-toggle";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import type { BenchmarkChangelog as BenchmarkChangelogData } from "@/components/benchmarks/benchmark-changelog";
+import { DeepSweEfficiencyChart } from "@/components/benchmarks/deep-swe/deep-swe-efficiency-chart";
+import { DeepSwePerformanceRanking } from "@/components/benchmarks/deep-swe/deep-swe-performance-ranking";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
-import { Label } from "@/components/ui/label";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+  BenchmarkToggleFilter,
+  type BenchmarkToggleFilterOption,
+} from "@/components/benchmarks/filters/benchmark-toggle-filter";
+import { ModelConfigurationFilter } from "@/components/benchmarks/filters/model-configuration-filter";
+import { ModelEfficiencyToggle } from "@/components/benchmarks/filters/model-efficiency-toggle";
 import type { CursorModelPrice } from "@/types-and-constants/cursor";
 import type {
   DeepSweLeaderboard,
@@ -44,13 +30,11 @@ import {
   type ModelEfficiencyCandidate,
 } from "@/utils/model-efficiency";
 
-import { DeepSweEfficiencyChart } from "./charts/deep-swe-efficiency-chart";
-import { DeepSwePerformanceRankingChart } from "./charts/deep-swe-performance-ranking-chart";
-
 /**
- * Public properties for the DeepSWE dashboard.
+ * DeepSWE data and controlled version selection; changelog and Cursor pricing are optional.
+ * Configuration filters and the efficiency metric are managed locally.
  */
-export interface DeepSweLeaderboardDashboardProps {
+export interface DeepSweDashboardProps {
   changelog?: BenchmarkChangelogData;
   cursorModelPrices?: readonly CursorModelPrice[];
   leaderboard: DeepSweLeaderboard;
@@ -63,36 +47,6 @@ interface ConfigModelGroup {
   rows: DeepSweLeaderboardRow[];
 }
 
-interface ToggleFilterOption<T extends string> {
-  label: string;
-  value: T;
-}
-
-interface ToggleFilterProps<T extends string> {
-  label: string;
-  options: readonly ToggleFilterOption<T>[];
-  value: T;
-  onChange: (value: T) => void;
-}
-
-interface ConfigFilterProps {
-  cursorMatchedCount: number;
-  cursorMaxMatchedCount: number;
-  hiddenConfigIds: ReadonlySet<string>;
-  models: ConfigModelGroup[];
-  selectedConfigs: ReadonlySet<string>;
-  totalCount: number;
-  onSelectCursorModels: () => void;
-  onSelectCursorModelsWithMax: () => void;
-  onToggleModel: (configs: readonly string[]) => void;
-  onToggleLevels: (
-    configs: readonly string[],
-    selectedConfigs: ReadonlySet<string>,
-  ) => void;
-  onShowAll: () => void;
-  onHideAll: () => void;
-}
-
 interface CursorFilterConfigs {
   cursorConfigs: ReadonlySet<string>;
   cursorMatchedCount: number;
@@ -103,13 +57,13 @@ interface CursorFilterConfigs {
 const VERSION_OPTIONS = [
   { label: "v1.1", value: "v1.1" },
   { label: "v1", value: "v1" },
-] as const satisfies readonly ToggleFilterOption<DeepSweVersion>[];
+] as const satisfies readonly BenchmarkToggleFilterOption<DeepSweVersion>[];
 
 const EFFICIENCY_METRIC_OPTIONS = [
   { label: "Cost", value: "cost" },
   { label: "Output tokens", value: "outputTokens" },
   { label: "Agent steps", value: "agentSteps" },
-] as const satisfies readonly ToggleFilterOption<EfficiencyMetric>[];
+] as const satisfies readonly BenchmarkToggleFilterOption<EfficiencyMetric>[];
 
 /**
  * Groups configurations by model for the shared filter.
@@ -188,266 +142,17 @@ const createCursorFilterConfigs = (
 };
 
 /**
- * Renders a single-selection toggle filter.
+ * Renders DeepSWE filters, efficiency comparison, and performance ranking.
+ * @param props - Benchmark data, optional metadata, and controlled version selection.
+ * @returns Dashboard with configuration selection retained per version and cost as the initial metric.
  */
-const ToggleFilter = <T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-}: ToggleFilterProps<T>): ReactElement => (
-  <ToggleGroup
-    aria-label={label}
-    className="bg-background"
-    onValueChange={(values) => {
-      const [nextValue] = values;
-      if (nextValue !== undefined) onChange(nextValue as T);
-    }}
-    size="sm"
-    spacing={0}
-    value={[value]}
-    variant="outline"
-  >
-    {options.map((option) => (
-      <ToggleGroupItem
-        aria-label={option.label}
-        className="min-w-10"
-        key={option.value}
-        value={option.value}
-      >
-        {option.label}
-      </ToggleGroupItem>
-    ))}
-  </ToggleGroup>
-);
-
-/**
- * Renders the configuration selector shared by both leaderboard views.
- */
-const ConfigFilter = ({
-  cursorMatchedCount,
-  cursorMaxMatchedCount,
-  hiddenConfigIds,
-  models,
-  selectedConfigs,
-  totalCount,
-  onSelectCursorModels,
-  onSelectCursorModelsWithMax,
-  onToggleModel,
-  onToggleLevels,
-  onShowAll,
-  onHideAll,
-}: ConfigFilterProps): ReactElement => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const visibleModels = useMemo(
-    () =>
-      normalizedSearchQuery.length === 0
-        ? models
-        : models.filter((modelGroup) =>
-            modelGroup.model.toLowerCase().includes(normalizedSearchQuery),
-          ),
-    [models, normalizedSearchQuery],
-  );
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" />}>
-        Configs{" "}
-        <span className="text-muted-foreground tabular-nums">
-          ({selectedConfigs.size}/{totalCount})
-        </span>
-        <ChevronDown aria-hidden data-icon="inline-end" />
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Filter configurations</DropdownMenuLabel>
-          <DropdownMenuItem onClick={onShowAll}>Select all</DropdownMenuItem>
-          <DropdownMenuItem onClick={onHideAll}>Clear</DropdownMenuItem>
-        </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Cursor availability</DropdownMenuLabel>
-
-          <div className="grid gap-2 px-2 pb-2">
-            <Button
-              aria-label={`Select ${cursorMatchedCount} Cursor models that do not require legacy Max Mode`}
-              disabled={cursorMatchedCount === 0}
-              onClick={onSelectCursorModels}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Cursor models
-            </Button>
-
-            <Button
-              aria-label={`Select Cursor models, including ${cursorMaxMatchedCount} that require legacy Max Mode`}
-              disabled={cursorMaxMatchedCount === 0}
-              onClick={onSelectCursorModelsWithMax}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Cursor models{" "}
-              <span className="text-muted-foreground">[MAX included]</span>
-            </Button>
-          </div>
-        </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Models</DropdownMenuLabel>
-
-          <div className="px-2 pb-2">
-            <InputGroup>
-              <InputGroupInput
-                aria-label="Search models"
-                onKeyDown={(e) => {
-                  if (
-                    e.key.length === 1 &&
-                    !e.ctrlKey &&
-                    !e.metaKey &&
-                    !e.altKey
-                  ) {
-                    e.stopPropagation();
-                  }
-                }}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search models..."
-                type="text"
-                value={searchQuery}
-              />
-              <InputGroupAddon>
-                <SearchIcon aria-hidden />
-              </InputGroupAddon>
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  onClick={() => setSearchQuery("")}
-                  className={searchQuery.length > 0 ? "flex" : "hidden"}
-                >
-                  <X />
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
-          </div>
-        </DropdownMenuGroup>
-
-        <DropdownMenuGroup className="flex max-h-80 flex-col gap-1 overflow-y-auto">
-          {visibleModels.length === 0 ? (
-            <div className="text-muted-foreground px-2 py-3 text-sm">
-              No models found.
-            </div>
-          ) : (
-            visibleModels.map((modelGroup) => {
-              const configIds = modelGroup.rows.map((row) => row.config);
-              const selectedLevelIds = configIds.filter((config) =>
-                selectedConfigs.has(config),
-              );
-              const selectedLevelCount = selectedLevelIds.length;
-              const totalLevelCount = modelGroup.rows.length;
-              const hiddenLevelCount = modelGroup.rows.filter((row) =>
-                hiddenConfigIds.has(row.config),
-              ).length;
-
-              return (
-                <DropdownMenuItem
-                  closeOnClick={false}
-                  className="focus:text-foreground focus:**:text-foreground data-highlighted:text-foreground data-highlighted:**:text-foreground flex-col items-stretch gap-2 p-2 focus:bg-transparent data-highlighted:bg-transparent"
-                  key={modelGroup.model}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Checkbox
-                      aria-label={`Select all ${modelGroup.model} levels`}
-                      checked={selectedLevelCount === totalLevelCount}
-                      indeterminate={
-                        selectedLevelCount > 0 &&
-                        selectedLevelCount < totalLevelCount
-                      }
-                      onCheckedChange={() => onToggleModel(configIds)}
-                      id={modelGroup.model}
-                    />
-
-                    <Label
-                      className="min-w-0 flex-1 truncate font-medium"
-                      htmlFor={modelGroup.model}
-                    >
-                      {modelGroup.model}
-                    </Label>
-
-                    {hiddenLevelCount > 0 && (
-                      <Badge className="shrink-0" variant="secondary">
-                        {hiddenLevelCount} level
-                        {hiddenLevelCount === 1 ? "" : "s"} hidden
-                      </Badge>
-                    )}
-
-                    <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                      {selectedLevelCount}/{totalLevelCount}
-                    </span>
-                  </div>
-
-                  <ToggleGroup
-                    aria-label={`${modelGroup.model} reasoning levels`}
-                    className="ml-6 max-w-full flex-wrap"
-                    onValueChange={(values) =>
-                      onToggleLevels(configIds, new Set(values))
-                    }
-                    size="sm"
-                    spacing={0}
-                    value={selectedLevelIds}
-                    multiple
-                    variant="outline"
-                  >
-                    {modelGroup.rows.map((row) => {
-                      const effort = getReasoningEffort(row);
-
-                      return (
-                        <ToggleGroupItem
-                          aria-label={`${modelGroup.model} ${effort} reasoning level`}
-                          key={row.config}
-                          pressed={selectedLevelIds.includes(row.config)}
-                          size="sm"
-                          title={[
-                            effort.toUpperCase(),
-                            row.mean_cost_usd === null
-                              ? null
-                              : `$${row.mean_cost_usd.toFixed(2)}`,
-                            `${(row.pass_at_1 * 100).toFixed(0)}%`,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                          value={row.config}
-                        >
-                          {effort}
-                        </ToggleGroupItem>
-                      );
-                    })}
-                  </ToggleGroup>
-                </DropdownMenuItem>
-              );
-            })
-          )}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-};
-
-/**
- * Coordinates shared configuration filters for both leaderboard views.
- */
-export const DeepSweLeaderboardDashboard = ({
+export const DeepSweDashboard = ({
   changelog,
   cursorModelPrices,
   leaderboard,
   version,
   onVersionChange,
-}: DeepSweLeaderboardDashboardProps): ReactElement => {
+}: DeepSweDashboardProps): ReactElement => {
   const [metric, setMetric] = useState<EfficiencyMetric>("cost");
   const matchedRows = useMemo(
     () =>
@@ -465,7 +170,23 @@ export const DeepSweLeaderboardDashboard = ({
   );
 
   const configModels = useMemo(
-    () => groupRowsByModel(matchedRows),
+    () =>
+      groupRowsByModel(matchedRows).map((group) => ({
+        model: group.model,
+        rows: group.rows.map((row) => ({
+          config: row.config,
+          effort: getReasoningEffort(row),
+          title: [
+            getReasoningEffort(row).toUpperCase(),
+            row.mean_cost_usd === null
+              ? null
+              : `$${row.mean_cost_usd.toFixed(2)}`,
+            `${(row.pass_at_1 * 100).toFixed(0)}%`,
+          ]
+            .filter(Boolean)
+            .join(" \u00b7 "),
+        })),
+      })),
     [matchedRows],
   );
 
@@ -650,7 +371,7 @@ export const DeepSweLeaderboardDashboard = ({
           <span className="text-muted-foreground text-xs font-medium">
             Version
           </span>
-          <ToggleFilter
+          <BenchmarkToggleFilter
             label="Benchmark version"
             onChange={onVersionChange}
             options={VERSION_OPTIONS}
@@ -662,7 +383,7 @@ export const DeepSweLeaderboardDashboard = ({
           <span className="text-muted-foreground text-xs font-medium">
             Metric
           </span>
-          <ToggleFilter
+          <BenchmarkToggleFilter
             label="Efficiency metric"
             onChange={setMetric}
             options={EFFICIENCY_METRIC_OPTIONS}
@@ -678,7 +399,7 @@ export const DeepSweLeaderboardDashboard = ({
             showMoreEfficientOnly={showMoreEfficientOnly}
           />
 
-          <ConfigFilter
+          <ModelConfigurationFilter
             cursorMatchedCount={cursorFilterConfigs.cursorMatchedCount}
             cursorMaxMatchedCount={cursorFilterConfigs.cursorMaxMatchedCount}
             hiddenConfigIds={hiddenConfigIds}
@@ -716,7 +437,7 @@ export const DeepSweLeaderboardDashboard = ({
         version={version}
       />
 
-      <DeepSwePerformanceRankingChart
+      <DeepSwePerformanceRanking
         key={`${version}-${hiddenConfigKey}`}
         rows={visibleRows}
       />

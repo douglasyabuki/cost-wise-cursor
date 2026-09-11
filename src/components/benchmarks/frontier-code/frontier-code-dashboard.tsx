@@ -1,28 +1,14 @@
-import { ChevronDown, SearchIcon, X } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
-import type { BenchmarkChangelog as BenchmarkChangelogData } from "@/components/dashboard/benchmark-changelog";
-import { ModelEfficiencyToggle } from "@/components/dashboard/model-efficiency-toggle";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import type { BenchmarkChangelog as BenchmarkChangelogData } from "@/components/benchmarks/benchmark-changelog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
-import { Label } from "@/components/ui/label";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+  BenchmarkToggleFilter,
+  type BenchmarkToggleFilterOption,
+} from "@/components/benchmarks/filters/benchmark-toggle-filter";
+import { ModelConfigurationFilter } from "@/components/benchmarks/filters/model-configuration-filter";
+import { ModelEfficiencyToggle } from "@/components/benchmarks/filters/model-efficiency-toggle";
+import { FrontierCodeEfficiencyChart } from "@/components/benchmarks/frontier-code/frontier-code-efficiency-chart";
+import { FrontierCodePerformanceRanking } from "@/components/benchmarks/frontier-code/frontier-code-performance-ranking";
 import type { CursorModelPrice } from "@/types-and-constants/cursor";
 import type {
   FrontierCodeLeaderboard,
@@ -44,13 +30,11 @@ import {
   type ModelEfficiencyCandidate,
 } from "@/utils/model-efficiency";
 
-import { FrontierCodeComparisonChart } from "./charts/frontier-code-efficiency-chart";
-import { FrontierCodePerformanceRankingChart } from "./charts/frontier-code-performance-ranking-chart";
-
 /**
- * Public properties for the FrontierCode dashboard.
+ * FrontierCode data and controlled version/subset selection; changelog and Cursor pricing are optional.
+ * Configuration filters are managed locally for each version/subset combination.
  */
-export interface FrontierCodeLeaderboardDashboardProps {
+export interface FrontierCodeDashboardProps {
   changelog?: BenchmarkChangelogData;
   cursorModelPrices?: readonly CursorModelPrice[];
   leaderboard: FrontierCodeLeaderboard;
@@ -65,36 +49,6 @@ interface ConfigModelGroup {
   rows: FrontierCodeLeaderboardRow[];
 }
 
-interface ToggleFilterOption<T extends string> {
-  label: string;
-  value: T;
-}
-
-interface ToggleFilterProps<T extends string> {
-  label: string;
-  options: readonly ToggleFilterOption<T>[];
-  value: T;
-  onChange: (value: T) => void;
-}
-
-interface ConfigFilterProps {
-  cursorMatchedCount: number;
-  cursorMaxMatchedCount: number;
-  hiddenConfigIds: ReadonlySet<string>;
-  models: ConfigModelGroup[];
-  selectedConfigs: ReadonlySet<string>;
-  totalCount: number;
-  onSelectCursorModels: () => void;
-  onSelectCursorModelsWithMax: () => void;
-  onToggleModel: (configs: readonly string[]) => void;
-  onToggleLevels: (
-    configs: readonly string[],
-    selectedConfigs: ReadonlySet<string>,
-  ) => void;
-  onShowAll: () => void;
-  onHideAll: () => void;
-}
-
 interface CursorFilterConfigs {
   cursorConfigs: ReadonlySet<string>;
   cursorMatchedCount: number;
@@ -107,12 +61,12 @@ const EMPTY_EXCLUDED_CONFIGS: ReadonlySet<string> = new Set();
 const VERSION_OPTIONS = [
   { label: "v1.1", value: "v1.1" },
   { label: "v1", value: "v1" },
-] as const satisfies readonly ToggleFilterOption<FrontierCodeVersion>[];
+] as const satisfies readonly BenchmarkToggleFilterOption<FrontierCodeVersion>[];
 
 const SUBSET_OPTIONS = [
   { label: "Main (100)", value: "main" },
   { label: "Extended (150)", value: "extended" },
-] as const satisfies readonly ToggleFilterOption<FrontierCodeSubset>[];
+] as const satisfies readonly BenchmarkToggleFilterOption<FrontierCodeSubset>[];
 
 /**
  * Groups FrontierCode configurations by model for the shared filter.
@@ -186,244 +140,6 @@ const createCursorFilterConfigs = (
 };
 
 /**
- * Renders a single-selection toggle filter.
- */
-const ToggleFilter = <T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-}: ToggleFilterProps<T>): ReactElement => (
-  <ToggleGroup
-    aria-label={label}
-    className="bg-background"
-    onValueChange={(values) => {
-      const [nextValue] = values;
-      if (nextValue !== undefined) onChange(nextValue as T);
-    }}
-    size="sm"
-    spacing={0}
-    value={[value]}
-    variant="outline"
-  >
-    {options.map((option) => (
-      <ToggleGroupItem
-        aria-label={option.label}
-        className="min-w-10"
-        key={option.value}
-        value={option.value}
-      >
-        {option.label}
-      </ToggleGroupItem>
-    ))}
-  </ToggleGroup>
-);
-
-/**
- * Renders the FrontierCode model and effort configuration selector.
- *
- * @param props - Model groups, selection state, and Cursor presets.
- * @returns Configuration filter menu.
- */
-const ConfigFilter = ({
-  cursorMatchedCount,
-  cursorMaxMatchedCount,
-  hiddenConfigIds,
-  models,
-  selectedConfigs,
-  totalCount,
-  onSelectCursorModels,
-  onSelectCursorModelsWithMax,
-  onToggleModel,
-  onToggleLevels,
-  onShowAll,
-  onHideAll,
-}: ConfigFilterProps): ReactElement => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const visibleModels = useMemo(
-    () =>
-      normalizedSearchQuery.length === 0
-        ? models
-        : models.filter((modelGroup) =>
-            modelGroup.model.toLowerCase().includes(normalizedSearchQuery),
-          ),
-    [models, normalizedSearchQuery],
-  );
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" />}>
-        Configs{" "}
-        <span className="text-muted-foreground tabular-nums">
-          ({selectedConfigs.size}/{totalCount})
-        </span>
-        <ChevronDown aria-hidden data-icon="inline-end" />
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Filter configurations</DropdownMenuLabel>
-          <DropdownMenuItem onClick={onShowAll}>Select all</DropdownMenuItem>
-          <DropdownMenuItem onClick={onHideAll}>Clear</DropdownMenuItem>
-        </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Cursor availability</DropdownMenuLabel>
-          <div className="grid gap-2 px-2 pb-2">
-            <Button
-              aria-label={`Select ${cursorMatchedCount} Cursor models that do not require legacy Max Mode`}
-              disabled={cursorMatchedCount === 0}
-              onClick={onSelectCursorModels}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Cursor models
-            </Button>
-            <Button
-              aria-label={`Select Cursor models, including ${cursorMaxMatchedCount} that require legacy Max Mode`}
-              disabled={cursorMaxMatchedCount === 0}
-              onClick={onSelectCursorModelsWithMax}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Cursor models{" "}
-              <span className="text-muted-foreground">[MAX included]</span>
-            </Button>
-          </div>
-        </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Models</DropdownMenuLabel>
-          <div className="px-2 pb-2">
-            <InputGroup>
-              <InputGroupInput
-                aria-label="Search models"
-                onKeyDown={(event) => {
-                  if (
-                    event.key.length === 1 &&
-                    !event.ctrlKey &&
-                    !event.metaKey &&
-                    !event.altKey
-                  ) {
-                    event.stopPropagation();
-                  }
-                }}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search models..."
-                type="text"
-                value={searchQuery}
-              />
-              <InputGroupAddon>
-                <SearchIcon aria-hidden />
-              </InputGroupAddon>
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  className={searchQuery.length > 0 ? "flex" : "hidden"}
-                  onClick={() => setSearchQuery("")}
-                >
-                  <X />
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
-          </div>
-        </DropdownMenuGroup>
-
-        <DropdownMenuGroup className="flex max-h-80 flex-col gap-1 overflow-y-auto">
-          {visibleModels.length === 0 ? (
-            <div className="text-muted-foreground px-2 py-3 text-sm">
-              No models found.
-            </div>
-          ) : (
-            visibleModels.map((modelGroup) => {
-              const configIds = modelGroup.rows.map((row) => row.config);
-              const selectedLevelIds = configIds.filter((config) =>
-                selectedConfigs.has(config),
-              );
-              const selectedLevelCount = selectedLevelIds.length;
-              const totalLevelCount = modelGroup.rows.length;
-              const hiddenLevelCount = modelGroup.rows.filter((row) =>
-                hiddenConfigIds.has(row.config),
-              ).length;
-
-              return (
-                <DropdownMenuItem
-                  closeOnClick={false}
-                  className="focus:text-foreground focus:**:text-foreground data-highlighted:text-foreground data-highlighted:**:text-foreground flex-col items-stretch gap-2 p-2 focus:bg-transparent data-highlighted:bg-transparent"
-                  key={modelGroup.model}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Checkbox
-                      aria-label={`Select all ${modelGroup.model} levels`}
-                      checked={selectedLevelCount === totalLevelCount}
-                      id={`frontier-code-${modelGroup.model}`}
-                      indeterminate={
-                        selectedLevelCount > 0 &&
-                        selectedLevelCount < totalLevelCount
-                      }
-                      onCheckedChange={() => onToggleModel(configIds)}
-                    />
-                    <Label
-                      className="min-w-0 flex-1 truncate font-medium"
-                      htmlFor={`frontier-code-${modelGroup.model}`}
-                    >
-                      {modelGroup.model}
-                    </Label>
-
-                    {hiddenLevelCount > 0 && (
-                      <Badge className="shrink-0" variant="secondary">
-                        {hiddenLevelCount} level
-                        {hiddenLevelCount === 1 ? "" : "s"} hidden
-                      </Badge>
-                    )}
-
-                    <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                      {selectedLevelCount}/{totalLevelCount}
-                    </span>
-                  </div>
-
-                  <ToggleGroup
-                    aria-label={`${modelGroup.model} reasoning levels`}
-                    className="ml-6 max-w-full flex-wrap"
-                    multiple
-                    onValueChange={(values) =>
-                      onToggleLevels(configIds, new Set(values))
-                    }
-                    size="sm"
-                    spacing={0}
-                    value={selectedLevelIds}
-                    variant="outline"
-                  >
-                    {modelGroup.rows.map((row) => (
-                      <ToggleGroupItem
-                        aria-label={`${modelGroup.model} ${row.reasoning_effort} reasoning level`}
-                        key={row.config}
-                        pressed={selectedLevelIds.includes(row.config)}
-                        size="sm"
-                        title={`${row.reasoning_effort.toUpperCase()} · score ${(row.score * 100).toFixed(1)}% · pass rate ${(row.pass_rate * 100).toFixed(1)}%`}
-                        value={row.config}
-                      >
-                        {row.reasoning_effort}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                </DropdownMenuItem>
-              );
-            })
-          )}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-};
-
-/**
  * Renders the FrontierCode dashboard for a selected version and subset.
  *
  * Configuration selection is kept independently for every version/subset
@@ -432,7 +148,7 @@ const ConfigFilter = ({
  * @param props - FrontierCode data, controls, and Cursor pricing records.
  * @returns FrontierCode controls and visualizations.
  */
-export const FrontierCodeLeaderboardDashboard = ({
+export const FrontierCodeDashboard = ({
   changelog,
   cursorModelPrices,
   leaderboard,
@@ -440,7 +156,7 @@ export const FrontierCodeLeaderboardDashboard = ({
   onVersionChange,
   subset,
   version,
-}: FrontierCodeLeaderboardDashboardProps): ReactElement => {
+}: FrontierCodeDashboardProps): ReactElement => {
   const rows = useMemo(
     () => getFrontierCodeRows(leaderboard, version, subset),
     [leaderboard, subset, version],
@@ -458,7 +174,18 @@ export const FrontierCodeLeaderboardDashboard = ({
     () => createCursorFilterConfigs(matchedRows),
     [matchedRows],
   );
-  const configModels = useMemo(() => groupRowsByModel(rows), [rows]);
+  const configModels = useMemo(
+    () =>
+      groupRowsByModel(rows).map((group) => ({
+        model: group.model,
+        rows: group.rows.map((row) => ({
+          config: row.config,
+          effort: row.reasoning_effort,
+          title: `${row.reasoning_effort.toUpperCase()} \u00b7 score ${(row.score * 100).toFixed(1)}% \u00b7 pass rate ${(row.pass_rate * 100).toFixed(1)}%`,
+        })),
+      })),
+    [rows],
+  );
 
   const [excludedConfigsBySelection, setExcludedConfigsBySelection] = useState<
     Partial<
@@ -651,7 +378,7 @@ export const FrontierCodeLeaderboardDashboard = ({
           <span className="text-muted-foreground text-xs font-medium">
             Version
           </span>
-          <ToggleFilter
+          <BenchmarkToggleFilter
             label="FrontierCode version"
             onChange={onVersionChange}
             options={VERSION_OPTIONS}
@@ -663,7 +390,7 @@ export const FrontierCodeLeaderboardDashboard = ({
           <span className="text-muted-foreground text-xs font-medium">
             Subset
           </span>
-          <ToggleFilter
+          <BenchmarkToggleFilter
             label="FrontierCode subset"
             onChange={onSubsetChange}
             options={SUBSET_OPTIONS}
@@ -679,7 +406,7 @@ export const FrontierCodeLeaderboardDashboard = ({
             showMoreEfficientOnly={showMoreEfficientOnly}
           />
 
-          <ConfigFilter
+          <ModelConfigurationFilter
             cursorMatchedCount={cursorFilterConfigs.cursorMatchedCount}
             cursorMaxMatchedCount={cursorFilterConfigs.cursorMaxMatchedCount}
             hiddenConfigIds={hiddenConfigIds}
@@ -702,7 +429,7 @@ export const FrontierCodeLeaderboardDashboard = ({
         </div>
       </div>
 
-      <FrontierCodeComparisonChart
+      <FrontierCodeEfficiencyChart
         availableRows={matchedRows}
         changelog={changelog}
         key={`${version}-${subset}-comparison-${hiddenConfigKey}`}
@@ -714,7 +441,7 @@ export const FrontierCodeLeaderboardDashboard = ({
         showAllPointLabels={showMoreEfficientOnly}
         showModelLines={!showMoreEfficientOnly}
       />
-      <FrontierCodePerformanceRankingChart
+      <FrontierCodePerformanceRanking
         key={`${version}-${subset}-ranking-${hiddenConfigKey}`}
         rows={visibleRows}
       />

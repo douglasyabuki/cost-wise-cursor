@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { DeepSweLeaderboardDashboard } from "@/components/dashboard/deep-swe-leaderboard-dashboard";
-import { FrontierCodeLeaderboardDashboard } from "@/components/dashboard/frontier-code-leaderboard-dashboard";
+import { DeepSweDashboard } from "@/components/benchmarks/deep-swe/deep-swe-dashboard";
+import { FrontierCodeDashboard } from "@/components/benchmarks/frontier-code/frontier-code-dashboard";
 import { LogoMark } from "@/components/logo-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -281,7 +281,7 @@ export const HomePage = () => {
             )}
 
             {deepSweQuery.isSuccess && (
-              <DeepSweLeaderboardDashboard
+              <DeepSweDashboard
                 cursorModelPrices={cursorQuery.data}
                 changelog={deepSweChangelogQuery.data}
                 leaderboard={deepSweQuery.data}
@@ -357,7 +357,7 @@ export const HomePage = () => {
             )}
 
             {frontierCodeQuery.isSuccess && (
-              <FrontierCodeLeaderboardDashboard
+              <FrontierCodeDashboard
                 cursorModelPrices={cursorQuery.data}
                 changelog={frontierCodeChangelogQuery.data}
                 leaderboard={frontierCodeQuery.data}

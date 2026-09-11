@@ -6,10 +6,7 @@ import type {
   DeepSweReasoningEffort,
   EfficiencyMetric,
 } from "@/types-and-constants/deep-swe";
-import {
-  DEEP_SWE_PROVIDER_COLORS,
-  DEEP_SWE_REASONING_EFFORT_ORDER,
-} from "@/types-and-constants/deep-swe";
+import { DEEP_SWE_REASONING_EFFORT_ORDER } from "@/types-and-constants/deep-swe";
 import { formatCostAxisTick } from "@/utils/chart";
 
 const DEEP_SWE_CHANGELOG_DATE_PATTERN =
@@ -222,8 +219,6 @@ const modelNameCollator = new Intl.Collator("en-US", {
   sensitivity: "base",
 });
 
-type DeepSweModelProvider = keyof typeof DEEP_SWE_PROVIDER_COLORS;
-
 /**
  * Returns the display label for a row's reasoning effort.
  *
@@ -256,45 +251,6 @@ export const getReasoningEffortOrder = (effort: string): number => {
  */
 export const compareModelNames = (first: string, second: string): number =>
   modelNameCollator.compare(first, second);
-
-const getModelProvider = (model: string): DeepSweModelProvider => {
-  const normalizedModel = model.toLowerCase();
-
-  if (normalizedModel.startsWith("claude")) return "anthropic";
-  if (normalizedModel.startsWith("gpt")) return "openai";
-  if (normalizedModel.startsWith("gemini")) return "google";
-  if (normalizedModel.startsWith("grok")) return "xai";
-  if (normalizedModel.startsWith("glm")) return "zhipu";
-  if (normalizedModel.startsWith("kimi")) return "moonshot";
-  if (normalizedModel.startsWith("qwen")) return "alibaba";
-  if (normalizedModel.startsWith("deepseek")) return "deepseek";
-  if (normalizedModel.startsWith("muse")) return "meta";
-
-  return "other";
-};
-
-const getModelPaletteIndex = (model: string, paletteSize: number): number => {
-  let hash = 0;
-
-  for (const character of model) {
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  }
-
-  return hash % paletteSize;
-};
-
-/**
- * Returns a stable provider-family color for a model.
- *
- * @param model - DeepSWE model identifier.
- * @returns Provider-family color with a stable per-model variant.
- */
-export const getModelColor = (model: string): string => {
-  const palette = DEEP_SWE_PROVIDER_COLORS[getModelProvider(model)];
-  const paletteIndex = getModelPaletteIndex(model, palette.length);
-
-  return palette[paletteIndex] ?? palette[0];
-};
 
 /**
  * Formats a nullable number in compact notation.

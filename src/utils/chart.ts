@@ -113,3 +113,35 @@ export const formatCostAxisTick = (value: number): string =>
  */
 export const formatChartPercentage = (value: number): string =>
   `${value.toFixed(2)}%`;
+
+/**
+ * Returns a readable 2/5/10-based tick interval.
+ *
+ * @param maximum - Maximum value represented by the axis.
+ * @param targetTickCount - Approximate number of desired intervals.
+ * @returns A rounded tick interval suitable for a numeric axis.
+ */
+export const getNiceTickStep = (
+  maximum: number,
+  targetTickCount: number,
+): number => {
+  if (maximum <= 0) return 1;
+  const rawStep = maximum / targetTickCount;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalizedStep = rawStep / magnitude;
+  if (normalizedStep >= 5) return 10 * magnitude;
+  if (normalizedStep >= 2) return 5 * magnitude;
+  return 2 * magnitude;
+};
+
+/**
+ * Converts a fractional score into a clamped percentage of a score axis.
+ *
+ * @param score - Fractional score to position.
+ * @param axisMaximum - Axis maximum in percentage points.
+ * @returns A percentage position between zero and 100.
+ */
+export const getScoreAxisPosition = (
+  score: number,
+  axisMaximum: number,
+): number => Math.min(100, Math.max(0, (score * 100 * 100) / axisMaximum));

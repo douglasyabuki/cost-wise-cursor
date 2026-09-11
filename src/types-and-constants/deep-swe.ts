@@ -26,22 +26,6 @@ export type DeepSweReasoningEffort =
   (typeof DEEP_SWE_REASONING_EFFORT_ORDER)[number];
 
 /**
- * Provider-family palettes used to identify DeepSWE models consistently.
- */
-export const DEEP_SWE_PROVIDER_COLORS = {
-  anthropic: ["#f97316", "#fb923c", "#ea580c"],
-  openai: ["#22c55e", "#4ade80", "#16a34a"],
-  google: ["#60a5fa", "#38bdf8", "#2563eb"],
-  xai: ["#94a3b8", "#cbd5e1", "#64748b"],
-  zhipu: ["#06b6d4", "#22d3ee", "#0891b2"],
-  moonshot: ["#f43f5e", "#fb7185", "#e11d48"],
-  alibaba: ["#14b8a6", "#2dd4bf", "#0f766e"],
-  deepseek: ["#a855f7", "#c084fc", "#7e22ce"],
-  meta: ["#3b82f6", "#60a5fa", "#1d4ed8"],
-  other: ["#a3a3a3", "#d4d4d4", "#737373"],
-} as const;
-
-/**
  * Finite fractional confidence bounds for a DeepSWE leaderboard result.
  */
 export interface DeepSweConfidenceBounds {

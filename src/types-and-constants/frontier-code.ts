@@ -9,11 +9,6 @@ export type FrontierCodeVersion = "v1.1" | "v1";
 export type FrontierCodeSubset = "main" | "extended";
 
 /**
- * Detail level used by the FrontierCode performance ranking.
- */
-export type FrontierCodeRankingMode = "best" | "all";
-
-/**
  * One raw FrontierCode result for a model, effort, and task subset.
  */
 export interface FrontierCodeResult {

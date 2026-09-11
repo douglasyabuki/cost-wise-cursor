@@ -8,170 +8,74 @@ import { type ReactElement, useCallback, useMemo, useState } from "react";
 import {
   BenchmarkChangelog,
   type BenchmarkChangelog as BenchmarkChangelogData,
-} from "@/components/dashboard/benchmark-changelog";
-import type {
-  DeepSweLeaderboardRow,
-  DeepSweReasoningEffort,
-  DeepSweVersion,
-  EfficiencyMetric,
-} from "@/types-and-constants/deep-swe";
+} from "@/components/benchmarks/benchmark-changelog";
+import { ModelChartContextMenu } from "@/components/benchmarks/efficiency/model-chart-context-menu";
 import {
   createChartPointSvgRenderer,
   formatChartPercentage,
   getMutedChartColor,
   getResponsiveChartLabelFontSize,
 } from "@/utils/chart";
-import {
-  formatMetricTick,
-  formatMetricValue,
-  getMetricAxisLabel,
-  getMetricValue,
-  getModelColor,
-  getReasoningEffort,
-  getReasoningEffortOrder,
-} from "@/utils/deep-swe";
+import { getModelColor } from "@/utils/model-colors";
 
-import { ModelChartContextMenu } from "./model-chart-context-menu";
-
-interface DeepSweEfficiencyChartProps {
-  /** All matched configurations available for the active benchmark version. */
-  availableRows: readonly DeepSweLeaderboardRow[];
-  /** Complete changelog data returned by the benchmark service. */
-  changelog?: BenchmarkChangelogData;
-  metric: EfficiencyMetric;
-  /** Adds one model configuration to the selected configs. */
-  onAddConfig: (config: string) => void;
-  /** Adds every configuration for one model to the selected configs. */
-  onAddModel: (model: string) => void;
-  /** Removes one model configuration from the selected configs. */
-  onRemoveConfig: (config: string) => void;
-  /** Removes every configuration for one model from the selected configs. */
-  onRemoveModel: (model: string) => void;
-  rows: readonly DeepSweLeaderboardRow[];
-  /** Whether every visible point should display its model and effort labels. */
-  showAllPointLabels: boolean;
-  /** Whether connected model lines should be rendered. */
-  showModelLines: boolean;
-  version: DeepSweVersion;
-}
-
-type DeepSweEfficiencyChartContentProps = Omit<
-  DeepSweEfficiencyChartProps,
-  "version"
->;
-
-interface ChartPoint {
+/** A normalized efficiency-chart point used by both benchmark datasets. */
+export interface EfficiencyChartPoint {
+  /** Stable configuration identifier used for focus and context actions. */
   config: string;
+  /** Model identifier shown in labels and the legend color. */
   model: string;
+  /** Reasoning-effort label shown beside the model. */
   effort: string;
+  /** Whether this point is the default label anchor for its model. */
   isLabelAnchor: boolean;
+  /** Score in percentage points. */
   score: number;
-  metricValue: number;
+  /** Normalized x-axis value, such as cost or efficiency metric. */
+  xValue: number;
 }
 
-interface ChartSeries {
+/** A colored model series for the shared efficiency chart. */
+export interface EfficiencyChartSeries {
+  /** Model identifier represented by the series. */
   model: string;
+  /** Model color used by marks and labels. */
   color: string;
-  points: ChartPoint[];
+  /** Ordered configurations represented by the model. */
+  points: EfficiencyChartPoint[];
 }
 
-interface MetricAxis {
-  maximum: number;
-  ticks: number[];
+interface ModelEfficiencyChartProps {
+  availableConfigs: readonly {
+    config: string;
+    level: string;
+    model: string;
+  }[];
+  changelog?: BenchmarkChangelogData;
+  chartAriaDescription: string;
+  chartAriaLabel: string;
+  emptyMessage: string;
+  formatXAxisTick: (value: number) => string;
+  formatXAxisValue: (value: number) => string;
+  heading: string;
+  headingId: string;
+  metricDescription: string;
+  onAddConfig: (config: string) => void;
+  onAddModel: (model: string) => void;
+  onRemoveConfig: (config: string) => void;
+  onRemoveModel: (model: string) => void;
+  series: readonly EfficiencyChartSeries[];
+  showAllPointLabels: boolean;
+  showModelLines: boolean;
+  xAxisLabel: string;
+  xAxisMaximum: number;
+  xAxisTicks: readonly number[];
+  yAxisLabel: string;
 }
 
-const PREFERRED_LABEL_EFFORTS: Readonly<
-  Partial<Record<string, DeepSweReasoningEffort>>
-> = {
-  "gpt-5-6-sol": "medium",
-  "gpt-5-6-terra": "medium",
-  "gpt-5-6-luna": "medium",
-  "gpt-5-5": "medium",
-  "claude-opus-4-8": "high",
-  "claude-opus-4-7": "xhigh",
-  "claude-fable-5": "high",
-  "claude-sonnet-5": "high",
-  "gemini-3-5-flash": "high",
-  "gemini-3-7-flash": "medium",
-  "muse-spark-1-1": "medium",
-};
-const X_AXIS_PADDING_RATIO = 1.04;
-const X_AXIS_TARGET_TICK_COUNT = 6;
 const SCORE_AXIS_MINIMUM_MAX = 80;
 const SCORE_TICK_STEP = 10;
 
-/** Normalizes a model identifier for stable label-anchor lookups. */
-const normalizeModelIdentifier = (model: string): string =>
-  model
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-/** Converts valid rows into ordered model series. */
-const createChartSeries = (
-  rows: readonly DeepSweLeaderboardRow[],
-  metric: EfficiencyMetric,
-): ChartSeries[] => {
-  const groupedPoints = new Map<string, ChartPoint[]>();
-
-  rows.forEach((row) => {
-    const metricValue = getMetricValue(row, metric);
-    if (
-      metricValue === null ||
-      !Number.isFinite(metricValue) ||
-      metricValue <= 0 ||
-      !Number.isFinite(row.pass_at_1)
-    ) {
-      return;
-    }
-
-    const points = groupedPoints.get(row.model) ?? [];
-    points.push({
-      config: row.config,
-      model: row.model,
-      effort: getReasoningEffort(row),
-      isLabelAnchor: false,
-      score: row.pass_at_1 * 100,
-      metricValue,
-    });
-    groupedPoints.set(row.model, points);
-  });
-
-  return [...groupedPoints.entries()]
-    .map(([model, unsortedPoints]) => {
-      const points = [...unsortedPoints].sort(
-        (first, second) =>
-          getReasoningEffortOrder(first.effort) -
-            getReasoningEffortOrder(second.effort) ||
-          first.metricValue - second.metricValue,
-      );
-      const preferredEffort =
-        PREFERRED_LABEL_EFFORTS[normalizeModelIdentifier(model)];
-      const labelPoint =
-        points.find(
-          (point) => point.effort.toLowerCase() === preferredEffort,
-        ) ?? points[points.length - 1];
-
-      return {
-        model,
-        color: getModelColor(model),
-        points: points.map((point) => ({
-          ...point,
-          isLabelAnchor: point.config === labelPoint?.config,
-        })),
-      };
-    })
-    .filter((series) => series.points.length > 0)
-    .sort(
-      (first, second) =>
-        Math.max(...second.points.map((point) => point.score)) -
-        Math.max(...first.points.map((point) => point.score)),
-    );
-};
-
-/** Calculates the vertical score-axis maximum. */
-const getScoreMaximum = (series: readonly ChartSeries[]): number => {
+const getScoreMaximum = (series: readonly EfficiencyChartSeries[]): number => {
   const highestScore = Math.max(
     0,
     ...series.flatMap((item) => item.points.map((point) => point.score)),
@@ -185,82 +89,60 @@ const getScoreMaximum = (series: readonly ChartSeries[]): number => {
   );
 };
 
-/** Creates score ticks from zero through the score-domain maximum. */
 const createScoreTicks = (maximum: number): number[] =>
   Array.from(
     { length: maximum / SCORE_TICK_STEP + 1 },
     (_, index) => index * SCORE_TICK_STEP,
   );
 
-/** Calculates a readable 2/5/10 tick interval. */
-const getNiceTickStep = (maximum: number, targetTickCount: number): number => {
-  if (maximum <= 0) return 1;
-  const rawStep = maximum / targetTickCount;
-  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
-  const normalizedStep = rawStep / magnitude;
-  if (normalizedStep >= 5) return 10 * magnitude;
-  if (normalizedStep >= 2) return 5 * magnitude;
-  return 2 * magnitude;
-};
-
-/** Calculates the padded metric domain and readable tick values. */
-const getMetricAxis = (series: readonly ChartSeries[]): MetricAxis => {
-  const highestMetricValue = Math.max(
-    0,
-    ...series.flatMap((item) => item.points.map((point) => point.metricValue)),
-  );
-  const maximum =
-    highestMetricValue > 0 ? highestMetricValue * X_AXIS_PADDING_RATIO : 1;
-  const step = getNiceTickStep(maximum, X_AXIS_TARGET_TICK_COUNT);
-  const ticks: number[] = [];
-  for (let value = 0; value <= maximum + Number.EPSILON; value += step) {
-    ticks.push(Math.round(value * 1_000_000) / 1_000_000);
-  }
-  return { maximum, ticks };
-};
-
-/** Renders the stateful TanStack Charts host. */
-const DeepSweEfficiencyChartContent = ({
-  availableRows,
+/**
+ * Renders the shared interactive score-versus-efficiency chart.
+ *
+ * @param props - Prepared series, axis formatting, metadata, and chart actions.
+ * @returns An accessible, keyboard-navigable efficiency comparison chart.
+ */
+export const ModelEfficiencyChart = ({
+  availableConfigs,
   changelog,
-  metric,
+  chartAriaDescription,
+  chartAriaLabel,
+  emptyMessage,
+  formatXAxisTick,
+  formatXAxisValue,
+  heading,
+  headingId,
+  metricDescription,
   onAddConfig,
   onAddModel,
   onRemoveConfig,
   onRemoveModel,
-  rows,
+  series,
   showAllPointLabels,
   showModelLines,
-}: DeepSweEfficiencyChartContentProps): ReactElement => {
+  xAxisLabel,
+  xAxisMaximum,
+  xAxisTicks,
+  yAxisLabel,
+}: ModelEfficiencyChartProps): ReactElement => {
   const [activeModel, setActiveModel] = useState<string | null>(null);
-  const series = useMemo(() => createChartSeries(rows, metric), [metric, rows]);
-  const availableConfigs = useMemo(
-    () =>
-      availableRows.map((row) => ({
-        config: row.config,
-        level: getReasoningEffort(row),
-        model: row.model,
-      })),
-    [availableRows],
-  );
   const handleFocusChange = useCallback(
-    (point: { datum: ChartPoint } | null): void => {
+    (point: { datum: EfficiencyChartPoint } | null): void => {
       setActiveModel(point?.datum.model ?? null);
     },
     [],
   );
   const renderSvg = useMemo(
     () =>
-      createChartPointSvgRenderer<ChartPoint>(
+      createChartPointSvgRenderer<EfficiencyChartPoint>(
         (point) =>
-          `${point.model} · ${point.effort} effort · ${formatChartPercentage(point.score)} score · ${formatMetricValue(metric, point.metricValue)}`,
+          `${point.model} · ${point.effort} effort · ${formatChartPercentage(point.score)} score · ${formatXAxisValue(point.xValue)}`,
         (point) => ({
           config: point.config,
           level: point.effort,
           model: point.model,
         }),
       ),
-    [metric],
+    [formatXAxisValue],
   );
   const definition = useMemo(() => {
     const points = series.flatMap((item) => item.points);
@@ -269,14 +151,13 @@ const DeepSweEfficiencyChartContent = ({
     );
     const scoreMaximum = getScoreMaximum(series);
     const scoreTicks = createScoreTicks(scoreMaximum);
-    const metricAxis = getMetricAxis(series);
     const hoveredLevelPoints = points.filter(
       (point) => !showAllPointLabels && !point.isLabelAnchor,
     );
     const interactionMark = showModelLines
       ? lineY(points, {
           id: "configurations",
-          x: "metricValue",
+          x: "xValue",
           y: "score",
           z: "model",
           color: "model",
@@ -286,7 +167,7 @@ const DeepSweEfficiencyChartContent = ({
         })
       : dot(points, {
           id: "configurations",
-          x: "metricValue",
+          x: "xValue",
           y: "score",
           z: "model",
           color: "model",
@@ -303,7 +184,7 @@ const DeepSweEfficiencyChartContent = ({
       showModelLines
         ? lineY(points, {
             id: "focused-configurations",
-            x: "metricValue",
+            x: "xValue",
             y: "score",
             z: "model",
             color: "model",
@@ -313,7 +194,7 @@ const DeepSweEfficiencyChartContent = ({
           })
         : dot(points, {
             id: "focused-configurations",
-            x: "metricValue",
+            x: "xValue",
             y: "score",
             z: "model",
             color: "model",
@@ -322,13 +203,12 @@ const DeepSweEfficiencyChartContent = ({
           }),
       { match: "series" },
     );
-
     const hoveredLevelLabel =
       hoveredLevelPoints.length > 0
         ? whenFocused(
             text(hoveredLevelPoints, {
               id: "hovered-effort-label",
-              x: "metricValue",
+              x: "xValue",
               y: "score",
               z: "model",
               text: (point) => point.effort.toUpperCase(),
@@ -345,7 +225,7 @@ const DeepSweEfficiencyChartContent = ({
         : null;
     const projection = focusGuideX(points, {
       id: "active-configuration-guide",
-      x: "metricValue",
+      x: "xValue",
       y: "score",
       z: "model",
       key: "config",
@@ -360,8 +240,7 @@ const DeepSweEfficiencyChartContent = ({
         strokeOpacity: 0.8,
       },
       xLabel: {
-        format: (_value, { point }) =>
-          formatMetricValue(metric, point.datum.metricValue),
+        format: (_value, { point }) => formatXAxisValue(point.datum.xValue),
         background: "transparent",
         color: (point) => getModelColor(point.model),
         paddingX: 0,
@@ -397,7 +276,7 @@ const DeepSweEfficiencyChartContent = ({
           decorative(
             text(labelPoints, {
               id: "model-labels",
-              x: "metricValue",
+              x: "xValue",
               y: "score",
               z: "model",
               text: "model",
@@ -411,7 +290,7 @@ const DeepSweEfficiencyChartContent = ({
           decorative(
             text(labelPoints, {
               id: "effort-labels",
-              x: "metricValue",
+              x: "xValue",
               y: "score",
               z: "model",
               text: (point) => point.effort.toUpperCase(),
@@ -425,7 +304,7 @@ const DeepSweEfficiencyChartContent = ({
           whenFocused(
             text(labelPoints, {
               id: "focused-model-labels",
-              x: "metricValue",
+              x: "xValue",
               y: "score",
               z: "model",
               text: "model",
@@ -440,7 +319,7 @@ const DeepSweEfficiencyChartContent = ({
           whenFocused(
             text(labelPoints, {
               id: "focused-effort-labels",
-              x: "metricValue",
+              x: "xValue",
               y: "score",
               z: "model",
               text: (point) => point.effort.toUpperCase(),
@@ -456,7 +335,7 @@ const DeepSweEfficiencyChartContent = ({
         ],
         scales: {
           x: {
-            scale: scaleLinear().domain([0, metricAxis.maximum]),
+            scale: scaleLinear().domain([0, xAxisMaximum]),
             reverse: true,
             grid: true,
             axis: {
@@ -464,11 +343,11 @@ const DeepSweEfficiencyChartContent = ({
               ticks: {
                 values:
                   width < 560
-                    ? metricAxis.ticks.filter((_, index) => index % 2 === 0)
-                    : metricAxis.ticks,
-                format: (value) => formatMetricTick(metric, value),
+                    ? xAxisTicks.filter((_, index) => index % 2 === 0)
+                    : xAxisTicks,
+                format: formatXAxisTick,
               },
-              label: getMetricAxisLabel(metric),
+              label: xAxisLabel,
             },
           },
           y: {
@@ -480,7 +359,7 @@ const DeepSweEfficiencyChartContent = ({
                 values: scoreTicks,
                 format: (value) => `${value}%`,
               },
-              label: "DeepSWE score",
+              label: yAxisLabel,
             },
           },
         },
@@ -499,22 +378,31 @@ const DeepSweEfficiencyChartContent = ({
         margin: { top: 56, right: 76, bottom: 52, left: 56 },
       }),
     });
-  }, [activeModel, metric, series, showAllPointLabels, showModelLines]);
+  }, [
+    activeModel,
+    formatXAxisTick,
+    formatXAxisValue,
+    series,
+    showAllPointLabels,
+    showModelLines,
+    xAxisLabel,
+    xAxisMaximum,
+    xAxisTicks,
+    yAxisLabel,
+  ]);
+
   return (
-    <section
-      aria-labelledby="deep-swe-efficiency-title"
-      className="flex flex-col gap-3"
-    >
+    <section aria-labelledby={headingId} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3
             className="text-lg leading-tight font-semibold tracking-tight"
-            id="deep-swe-efficiency-title"
+            id={headingId}
           >
-            Efficiency comparison
+            {heading}
           </h3>
           <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-6">
-            Compare benchmark score against cost, output tokens, or agent steps.
+            {metricDescription}
           </p>
         </div>
         <BenchmarkChangelog changelog={changelog} />
@@ -522,11 +410,11 @@ const DeepSweEfficiencyChartContent = ({
 
       <div className="bg-card relative min-w-0 overflow-hidden rounded-md border">
         <div className="text-muted-foreground pointer-events-none absolute top-4 right-5 z-10 text-xs italic">
-          most efficient ↗
+          most efficient ←
         </div>
         {series.length === 0 ? (
           <div className="text-muted-foreground flex h-110 items-center justify-center px-6 text-center text-sm">
-            No data is available for the selected configurations and metric.
+            {emptyMessage}
           </div>
         ) : (
           <ModelChartContextMenu
@@ -537,8 +425,8 @@ const DeepSweEfficiencyChartContent = ({
             onRemoveModel={onRemoveModel}
           >
             <Chart
-              ariaDescription="Higher scores and lower metric values indicate stronger efficiency."
-              ariaLabel={`DeepSWE score by ${getMetricAxisLabel(metric)}`}
+              ariaDescription={chartAriaDescription}
+              ariaLabel={chartAriaLabel}
               className="w-full **:data-ts-focus-layer:pointer-events-none [&_path]:pointer-events-none [&_text]:pointer-events-none"
               definition={definition}
               height={680}
@@ -552,37 +440,3 @@ const DeepSweEfficiencyChartContent = ({
     </section>
   );
 };
-
-/**
- * Renders the DeepSWE efficiency chart.
- *
- * @param props - Filtered rows, metadata, configuration, and benchmark version.
- * @returns Interactive score-versus-efficiency visualization.
- */
-export const DeepSweEfficiencyChart = ({
-  availableRows,
-  changelog,
-  metric,
-  onAddConfig,
-  onAddModel,
-  onRemoveConfig,
-  onRemoveModel,
-  rows,
-  showAllPointLabels,
-  showModelLines,
-  version,
-}: DeepSweEfficiencyChartProps): ReactElement => (
-  <DeepSweEfficiencyChartContent
-    key={`${version}-${metric}`}
-    availableRows={availableRows}
-    changelog={changelog}
-    metric={metric}
-    onAddConfig={onAddConfig}
-    onAddModel={onAddModel}
-    onRemoveConfig={onRemoveConfig}
-    onRemoveModel={onRemoveModel}
-    rows={rows}
-    showAllPointLabels={showAllPointLabels}
-    showModelLines={showModelLines}
-  />
-);
