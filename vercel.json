@@ -6,6 +6,10 @@
       "destination": "https://deepswe.datacurve.ai/artifacts/:version/leaderboard-live.json"
     },
     {
+      "source": "/deep-swe/changelog",
+      "destination": "https://deepswe.datacurve.ai/changelog"
+    },
+    {
       "source": "/frontier-code/data/frontiercode-leaderboard/data.json",
       "destination": "https://cognition.com/data/frontiercode-leaderboard/data.json"
     },
