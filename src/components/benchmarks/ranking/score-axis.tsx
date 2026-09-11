@@ -1,10 +1,13 @@
 import { type ReactElement } from "react";
 
-/** Public properties for the shared score-axis guide. */
+/**
+ * Properties for the shared score-axis guide.
+ *
+ * @property maximum - Maximum percentage represented by the axis.
+ * @property ticks - Percentage tick values rendered along the axis.
+ */
 export interface ScoreAxisProps {
-  /** Maximum percentage represented by the axis. */
   maximum: number;
-  /** Percentage tick values rendered along the axis. */
   ticks: readonly number[];
 }
 

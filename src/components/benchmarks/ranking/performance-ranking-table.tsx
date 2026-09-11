@@ -15,33 +15,38 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+/** A ranking-table row with the stable configuration id required for selection. */
 type PerformanceRankingTableRow = RowData & { config: string };
 
+/**
+ * Properties for the shared sortable performance-ranking table.
+ *
+ * @property ariaLabelledBy - ID of the heading that labels the table's containing section.
+ * @property columns - Complete benchmark-specific column definitions.
+ * @property data - Visible rows in their pre-table-sort order.
+ * @property caption - Screen-reader-only description of the table.
+ * @property emptyMessage - Message rendered when no configurations are visible.
+ * @property getRowId - Returns the stable configuration identifier for a row.
+ * @property activeSelectedConfig - Active configuration used to apply selected-row state.
+ * @property scoreAxisMaximum - Score-axis maximum in percentage points.
+ * @property scoreTicks - Percentage tick values rendered below the score column.
+ * @property scoreValueWidthClassName - Width class for the score value beside the bar.
+ * @property tableClassName - Minimum-width class for the benchmark table columns.
+ */
 type PerformanceRankingTableProps<TRow extends PerformanceRankingTableRow> = {
-  /** ID of the heading that labels the table's containing section. */
   ariaLabelledBy: string;
-  /** Complete benchmark-specific column definitions. */
   columns: TableOptions<
     typeof performanceRankingTableFeatures,
     TRow
   >["columns"];
-  /** Visible rows in their pre-table-sort order. */
   data: TRow[];
-  /** Screen-reader-only description of the table. */
   caption: string;
-  /** Message rendered when no configurations are visible. */
   emptyMessage: string;
-  /** Stable configuration identifier used for TanStack row IDs. */
   getRowId: (row: TRow) => string;
-  /** Active configuration, used to apply the selected row state. */
   activeSelectedConfig: string | null;
-  /** Score-axis maximum in percentage points. */
   scoreAxisMaximum: number;
-  /** Percentage tick values rendered below the score column. */
   scoreTicks: readonly number[];
-  /** Width class for the score value beside the bar. */
   scoreValueWidthClassName: string;
-  /** Minimum width class for the benchmark's table columns. */
   tableClassName: string;
 };
 

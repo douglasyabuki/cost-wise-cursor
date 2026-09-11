@@ -5,6 +5,11 @@ export type ModelMatchStrategy = "exact" | "alias" | "token-order";
 
 /**
  * Describes a successful match between a benchmark model and a Cursor model.
+ *
+ * @property benchmarkName - Original benchmark model name.
+ * @property cursorModel - Matched Cursor model record.
+ * @property cursorName - Cursor model name used for the match.
+ * @property strategy - Matching strategy that produced the result.
  */
 export interface CursorModelMatch<T> {
   cursorModel: T;
@@ -15,6 +20,8 @@ export interface CursorModelMatch<T> {
 
 /**
  * Benchmark row enriched with its corresponding Cursor model.
+ *
+ * @property cursorMatch - Matched Cursor model, or `null` when unmatched.
  */
 export type CursorMatchedRow<Row extends { model: string }, T> = Row & {
   cursorMatch: CursorModelMatch<T> | null;

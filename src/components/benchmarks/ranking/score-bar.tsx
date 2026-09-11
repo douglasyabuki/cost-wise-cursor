@@ -7,25 +7,31 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-/** A score bar's fractional lower and upper confidence bounds. */
+/**
+ * A score bar's fractional lower and upper confidence bounds.
+ *
+ * @property lower - Lower fractional score bound.
+ * @property upper - Upper fractional score bound.
+ */
 export interface ScoreBarConfidenceBounds {
-  /** Lower fractional score bound. */
   lower: number;
-  /** Upper fractional score bound. */
   upper: number;
 }
 
-/** Public properties for the reusable score bar. */
+/**
+ * Properties for the reusable score bar.
+ *
+ * @property color - Color used for the score fill and marker.
+ * @property confidenceBounds - Optional fractional bounds displayed in the marker tooltip.
+ * @property confidenceStart - Optional lower percentage position for the interval whisker.
+ * @property confidenceEnd - Optional upper percentage position for the interval whisker.
+ * @property scorePosition - Percentage position of the score along the bar.
+ */
 export interface ScoreBarProps {
-  /** Color used for the score fill and marker. */
   color: string;
-  /** Optional fractional confidence bounds displayed in the marker tooltip. */
   confidenceBounds?: ScoreBarConfidenceBounds;
-  /** Optional lower percentage position for the confidence interval whisker. */
   confidenceStart?: number;
-  /** Optional upper percentage position for the confidence interval whisker. */
   confidenceEnd?: number;
-  /** Percentage position of the score along the bar. */
   scorePosition: number;
 }
 

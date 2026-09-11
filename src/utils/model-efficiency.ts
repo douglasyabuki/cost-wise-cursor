@@ -1,5 +1,10 @@
 /**
  * A selected benchmark configuration used to compare model efficiency.
+ *
+ * @property config - Stable configuration identifier.
+ * @property model - Model identifier used for cross-model comparisons.
+ * @property score - Fractional benchmark score.
+ * @property cost - Benchmark cost in US dollars, or `null` when unavailable.
  */
 export interface ModelEfficiencyCandidate {
   config: string;

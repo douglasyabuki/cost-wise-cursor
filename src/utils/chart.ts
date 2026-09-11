@@ -121,7 +121,7 @@ export const formatChartPercentage = (value: number): string =>
  * @param targetTickCount - Approximate number of desired intervals.
  * @returns A rounded tick interval suitable for a numeric axis.
  */
-export const getNiceTickStep = (
+export const calculateAxisTickStep = (
   maximum: number,
   targetTickCount: number,
 ): number => {

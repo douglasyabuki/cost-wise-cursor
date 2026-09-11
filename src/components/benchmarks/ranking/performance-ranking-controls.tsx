@@ -15,12 +15,16 @@ const PERFORMANCE_RANKING_MODE_OPTIONS = [
   value: PerformanceRankingMode;
 }[];
 
+/**
+ * Properties for the shared Best/All ranking-detail toggle.
+ *
+ * @property label - Accessible label for the toggle group.
+ * @property value - Current Best/All mode.
+ * @property onChange - Called when the user chooses another mode.
+ */
 interface RankingModeToggleProps {
-  /** Accessible label for the toggle group. */
   label: string;
-  /** Current Best/All mode. */
   value: PerformanceRankingMode;
-  /** Called when the user chooses another mode. */
   onChange: (value: PerformanceRankingMode) => void;
 }
 
@@ -61,20 +65,29 @@ export const RankingModeToggle = ({
   </ToggleGroup>
 );
 
-/** Column methods required by the shared sortable header. */
+/**
+ * Column methods required by the shared sortable header.
+ *
+ * @property getIsSorted - Returns the current sort direction.
+ * @property getNextSortingOrder - Returns the next sort direction.
+ * @property toggleSorting - Advances the column sort direction.
+ */
 interface SortableHeaderColumn {
   getIsSorted: () => false | "asc" | "desc";
   getNextSortingOrder: () => false | "asc" | "desc";
   toggleSorting: (descending?: boolean) => void;
 }
 
-/** Public properties for a sortable performance-ranking header. */
+/**
+ * Properties for a sortable performance-ranking header.
+ *
+ * @property align - Header alignment controlling button placement; defaults to `"left"`.
+ * @property column - TanStack column sorting API.
+ * @property label - Human-readable column name used in the label and announcement.
+ */
 interface SortableHeaderProps {
-  /** Header alignment, which controls the button placement. */
   align?: "left" | "right";
-  /** TanStack column sorting API. */
   column: SortableHeaderColumn;
-  /** Human-readable column name used in the label and announcement. */
   label: string;
 }
 

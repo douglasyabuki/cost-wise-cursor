@@ -12,7 +12,7 @@ import type {
   DeepSweVersion,
   EfficiencyMetric,
 } from "@/types-and-constants/deep-swe";
-import { getNiceTickStep } from "@/utils/chart";
+import { calculateAxisTickStep } from "@/utils/chart";
 import {
   formatMetricTick,
   formatMetricValue,
@@ -23,29 +23,32 @@ import {
 } from "@/utils/deep-swe";
 import { getModelColor } from "@/utils/model-colors";
 
-/** Properties for the DeepSWE score-versus-efficiency chart. */
+/**
+ * Properties for the DeepSWE score-versus-efficiency chart.
+ *
+ * @property availableRows - All matched configurations available for the active benchmark version.
+ * @property changelog - Optional complete benchmark changelog.
+ * @property metric - Efficiency metric plotted on the horizontal axis.
+ * @property onAddConfig - Adds one configuration to the selected set.
+ * @property onAddModel - Adds every configuration for one model.
+ * @property onRemoveConfig - Removes one configuration from the selected set.
+ * @property onRemoveModel - Removes every configuration for one model.
+ * @property rows - Configurations currently selected for display.
+ * @property showAllPointLabels - Whether every visible point receives labels.
+ * @property showModelLines - Whether connected model lines are rendered.
+ * @property version - Benchmark version used to reset chart interaction state.
+ */
 interface DeepSweEfficiencyChartProps {
-  /** All matched configurations available for the active benchmark version. */
   availableRows: readonly DeepSweLeaderboardRow[];
-  /** Complete changelog data returned by the benchmark service. */
   changelog?: BenchmarkChangelogData;
-  /** Efficiency metric plotted on the horizontal axis. */
   metric: EfficiencyMetric;
-  /** Adds one model configuration to the selected configs. */
   onAddConfig: (config: string) => void;
-  /** Adds every configuration for one model to the selected configs. */
   onAddModel: (model: string) => void;
-  /** Removes one model configuration from the selected configs. */
   onRemoveConfig: (config: string) => void;
-  /** Removes every configuration for one model from the selected configs. */
   onRemoveModel: (model: string) => void;
-  /** Configurations currently selected for display. */
   rows: readonly DeepSweLeaderboardRow[];
-  /** Whether every visible point should display its model and effort labels. */
   showAllPointLabels: boolean;
-  /** Whether connected model lines should be rendered. */
   showModelLines: boolean;
-  /** Benchmark version used to reset chart interaction state. */
   version: DeepSweVersion;
 }
 
@@ -147,7 +150,7 @@ const getMetricAxis = (
   );
   const maximum =
     highestMetricValue > 0 ? highestMetricValue * X_AXIS_PADDING_RATIO : 1;
-  const step = getNiceTickStep(maximum, X_AXIS_TARGET_TICK_COUNT);
+  const step = calculateAxisTickStep(maximum, X_AXIS_TARGET_TICK_COUNT);
   const ticks: number[] = [];
   for (let value = 0; value <= maximum + Number.EPSILON; value += step) {
     ticks.push(Math.round(value * 1_000_000) / 1_000_000);

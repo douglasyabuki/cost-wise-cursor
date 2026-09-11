@@ -18,32 +18,63 @@ import {
 } from "@/utils/chart";
 import { getModelColor } from "@/utils/model-colors";
 
-/** A normalized efficiency-chart point used by both benchmark datasets. */
+/**
+ * A normalized efficiency-chart point used by both benchmark datasets.
+ *
+ * @property config - Stable configuration identifier used for focus and context actions.
+ * @property model - Model identifier shown in labels and the legend color.
+ * @property effort - Reasoning-effort label shown beside the model.
+ * @property isLabelAnchor - Whether this point is the default label anchor for its model.
+ * @property score - Score in percentage points.
+ * @property xValue - Normalized x-axis value, such as cost or an efficiency metric.
+ */
 export interface EfficiencyChartPoint {
-  /** Stable configuration identifier used for focus and context actions. */
   config: string;
-  /** Model identifier shown in labels and the legend color. */
   model: string;
-  /** Reasoning-effort label shown beside the model. */
   effort: string;
-  /** Whether this point is the default label anchor for its model. */
   isLabelAnchor: boolean;
-  /** Score in percentage points. */
   score: number;
-  /** Normalized x-axis value, such as cost or efficiency metric. */
   xValue: number;
 }
 
-/** A colored model series for the shared efficiency chart. */
+/**
+ * A colored model series for the shared efficiency chart.
+ *
+ * @property model - Model identifier represented by the series.
+ * @property color - Model color used by marks and labels.
+ * @property points - Ordered configurations represented by the model.
+ */
 export interface EfficiencyChartSeries {
-  /** Model identifier represented by the series. */
   model: string;
-  /** Model color used by marks and labels. */
   color: string;
-  /** Ordered configurations represented by the model. */
   points: EfficiencyChartPoint[];
 }
 
+/**
+ * Properties for the shared interactive score-versus-efficiency chart.
+ *
+ * @property availableConfigs - All configurations that context actions may add.
+ * @property changelog - Optional benchmark changelog shown beside the heading.
+ * @property chartAriaDescription - Screen-reader description of the chart's meaning.
+ * @property chartAriaLabel - Accessible name for the chart.
+ * @property emptyMessage - Message shown when no series can be plotted.
+ * @property formatXAxisTick - Formats compact x-axis tick labels.
+ * @property formatXAxisValue - Formats detailed x-axis values for focus announcements.
+ * @property heading - Visible chart heading.
+ * @property headingId - ID referenced by the chart section's `aria-labelledby`.
+ * @property metricDescription - Visible explanation of the selected metric.
+ * @property onAddConfig - Adds one configuration to the selection.
+ * @property onAddModel - Adds all configurations for one model.
+ * @property onRemoveConfig - Removes one configuration from the selection.
+ * @property onRemoveModel - Removes all configurations for one model.
+ * @property series - Prepared model series to render.
+ * @property showAllPointLabels - Whether every visible point receives labels.
+ * @property showModelLines - Whether configurations are connected by model lines.
+ * @property xAxisLabel - Visible x-axis label.
+ * @property xAxisMaximum - Maximum x-axis domain value.
+ * @property xAxisTicks - Values used for x-axis ticks.
+ * @property yAxisLabel - Visible y-axis label.
+ */
 interface ModelEfficiencyChartProps {
   availableConfigs: readonly {
     config: string;

@@ -23,14 +23,25 @@ import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
-/** A prepared configuration with a stable ID, effort label, and benchmark-specific tooltip. */
+/**
+ * A prepared configuration with a stable ID, effort label, and benchmark-specific tooltip.
+ *
+ * @property config - Stable configuration identifier.
+ * @property effort - Reasoning-effort label shown in the toggle.
+ * @property title - Tooltip text for the configuration option.
+ */
 export interface ModelConfigurationOption {
   config: string;
   effort: string;
   title: string;
 }
 
-/** A model and its ordered configuration options. */
+/**
+ * A model and its ordered configuration options.
+ *
+ * @property model - Model identifier shown in the filter.
+ * @property rows - Configuration options in reasoning-effort order.
+ */
 export interface ModelConfigurationGroup {
   model: string;
   rows: readonly ModelConfigurationOption[];
@@ -39,6 +50,19 @@ export interface ModelConfigurationGroup {
 /**
  * Prepared model groups and controlled configuration selection with Cursor presets.
  * All selection values and callbacks are required; search and menu state are local.
+ *
+ * @property cursorMatchedCount - Number of matched models that do not require legacy Max Mode.
+ * @property cursorMaxMatchedCount - Number of matched models requiring legacy Max Mode.
+ * @property hiddenConfigIds - Configuration ids hidden by the efficiency view.
+ * @property models - Prepared model groups and configuration options.
+ * @property selectedConfigs - Configuration ids currently selected by the user.
+ * @property totalCount - Total number of available configurations.
+ * @property onSelectCursorModels - Selects matched models that do not require legacy Max Mode.
+ * @property onSelectCursorModelsWithMax - Selects all matched models, including legacy Max Mode models.
+ * @property onToggleModel - Toggles every configuration for one model.
+ * @property onToggleLevels - Applies the selected levels for one model.
+ * @property onShowAll - Selects every available configuration.
+ * @property onHideAll - Clears the current configuration selection.
  */
 export interface ModelConfigurationFilterProps {
   cursorMatchedCount: number;

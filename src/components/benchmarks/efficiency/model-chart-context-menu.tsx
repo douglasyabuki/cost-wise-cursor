@@ -21,6 +21,14 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
+/**
+ * A chart dot resolved as a context-menu target.
+ *
+ * @property kind - Target discriminator.
+ * @property config - Configuration identifier represented by the dot.
+ * @property level - Reasoning-effort label represented by the dot.
+ * @property model - Model identifier represented by the dot.
+ */
 interface ModelChartContextTarget {
   kind: "dot";
   config: string;
@@ -28,18 +36,42 @@ interface ModelChartContextTarget {
   model: string;
 }
 
+/**
+ * A chart line resolved as a context-menu target.
+ *
+ * @property kind - Target discriminator.
+ * @property model - Model identifier represented by the line.
+ * @property visibleConfigs - Configuration ids currently represented by the line.
+ */
 interface ModelChartLineContextTarget {
   kind: "line";
   model: string;
   visibleConfigs: ReadonlySet<string>;
 }
 
+/**
+ * Configuration metadata available to chart context actions.
+ *
+ * @property config - Stable configuration identifier.
+ * @property level - Reasoning-effort label.
+ * @property model - Model identifier.
+ */
 interface ModelChartContextConfig {
   config: string;
   level: string;
   model: string;
 }
 
+/**
+ * Properties for the efficiency-chart context-menu wrapper.
+ *
+ * @property availableConfigs - Configurations that can be added to the selection.
+ * @property children - Chart content receiving context-menu behavior.
+ * @property onAddConfig - Adds one configuration.
+ * @property onAddModel - Adds all configurations for one model.
+ * @property onRemoveConfig - Removes one configuration.
+ * @property onRemoveModel - Removes all configurations for one model.
+ */
 interface ModelChartContextMenuProps {
   availableConfigs: readonly ModelChartContextConfig[];
   children: ReactNode;
@@ -52,6 +84,12 @@ interface ModelChartContextMenuProps {
 type ResolvedModelChartContextTarget =
   ModelChartContextTarget | ModelChartLineContextTarget;
 
+/**
+ * A point in viewport coordinates.
+ *
+ * @property x - Horizontal viewport coordinate.
+ * @property y - Vertical viewport coordinate.
+ */
 interface ScreenPoint {
   x: number;
   y: number;

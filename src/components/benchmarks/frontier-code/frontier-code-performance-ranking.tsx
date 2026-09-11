@@ -67,11 +67,14 @@ const compareGroupsByScore = (
 const getFrontierCodeAxisScore = (row: FrontierCodeLeaderboardRow): number =>
   row.score;
 
-/** Properties for the FrontierCode performance ranking. */
+/**
+ * Properties for the FrontierCode performance ranking.
+ *
+ * @property rows - Filtered FrontierCode configurations to display.
+ * @property onConfigSelect - Optional callback when a configuration is selected or cleared.
+ */
 interface FrontierCodePerformanceRankingProps {
-  /** Filtered FrontierCode configurations to display. */
   rows: readonly FrontierCodeLeaderboardRow[];
-  /** Called when the user selects or clears a configuration. */
   onConfigSelect?: (config: string | null) => void;
 }
 

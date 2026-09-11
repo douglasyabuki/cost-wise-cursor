@@ -4,6 +4,11 @@ import { Toggle } from "@/components/ui/toggle";
 
 /**
  * Public properties for the model-efficiency view toggle.
+ *
+ * @property hiddenConfigurationCount - Number of outperformed configurations hidden by the view.
+ * @property showMoreEfficientOnly - Whether the reduced model set is active.
+ * @property modelCount - Number of selected models.
+ * @property onShowMoreEfficientOnlyChange - Called when the toggle state changes.
  */
 export interface ModelEfficiencyToggleProps {
   hiddenConfigurationCount: number;

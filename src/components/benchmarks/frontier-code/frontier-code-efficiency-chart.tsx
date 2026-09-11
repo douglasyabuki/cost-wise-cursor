@@ -7,32 +7,35 @@ import {
   ModelEfficiencyChart,
 } from "@/components/benchmarks/efficiency/model-efficiency-chart";
 import type { FrontierCodeLeaderboardRow } from "@/types-and-constants/frontier-code";
-import { formatCostAxisTick, getNiceTickStep } from "@/utils/chart";
+import { calculateAxisTickStep, formatCostAxisTick } from "@/utils/chart";
 import {
   formatFrontierCodeCost,
   getFrontierCodeReasoningEffortOrder,
 } from "@/utils/frontier-code";
 import { getModelColor } from "@/utils/model-colors";
 
-/** Public properties for the FrontierCode score-versus-cost chart. */
+/**
+ * Properties for the FrontierCode score-versus-cost chart.
+ *
+ * @property availableRows - All matched configurations available for the active benchmark selection.
+ * @property changelog - Optional complete benchmark changelog.
+ * @property onAddConfig - Adds one configuration to the selected set.
+ * @property onAddModel - Adds every configuration for one model.
+ * @property onRemoveConfig - Removes one configuration from the selected set.
+ * @property onRemoveModel - Removes every configuration for one model.
+ * @property rows - Configurations currently selected for display.
+ * @property showAllPointLabels - Whether every visible point receives labels.
+ * @property showModelLines - Whether connected model lines are rendered.
+ */
 export interface FrontierCodeEfficiencyChartProps {
-  /** All matched configurations available for the active benchmark selection. */
   availableRows: readonly FrontierCodeLeaderboardRow[];
-  /** Complete changelog data returned by the benchmark service. */
   changelog?: BenchmarkChangelogData;
-  /** Adds one model configuration to the selected configs. */
   onAddConfig: (config: string) => void;
-  /** Adds every configuration for one model to the selected configs. */
   onAddModel: (model: string) => void;
-  /** Removes one model configuration from the selected configs. */
   onRemoveConfig: (config: string) => void;
-  /** Removes every configuration for one model from the selected configs. */
   onRemoveModel: (model: string) => void;
-  /** Configurations currently selected for display. */
   rows: readonly FrontierCodeLeaderboardRow[];
-  /** Whether every visible point should display its model and effort labels. */
   showAllPointLabels: boolean;
-  /** Whether connected model lines should be rendered. */
   showModelLines: boolean;
 }
 
@@ -102,7 +105,7 @@ const getCostAxis = (
     ...series.flatMap((item) => item.points.map((point) => point.xValue)),
   );
   const maximum = highestCost > 0 ? highestCost * X_AXIS_PADDING_RATIO : 1;
-  const step = getNiceTickStep(maximum, X_AXIS_TARGET_TICK_COUNT);
+  const step = calculateAxisTickStep(maximum, X_AXIS_TARGET_TICK_COUNT);
   const ticks: number[] = [];
   for (let value = 0; value <= maximum + Number.EPSILON; value += step) {
     ticks.push(Math.round(value * 1_000_000) / 1_000_000);

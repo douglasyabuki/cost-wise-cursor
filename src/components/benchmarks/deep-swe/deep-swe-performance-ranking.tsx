@@ -93,11 +93,14 @@ const compareGroupsByPerformance = (
 const getDeepSweAxisScore = (row: DeepSweLeaderboardRow): number =>
   Math.max(row.pass_at_1, getConfidenceBounds(row).upper);
 
-/** Properties for the DeepSWE performance ranking. */
+/**
+ * Properties for the DeepSWE performance ranking.
+ *
+ * @property rows - Filtered DeepSWE configurations to display.
+ * @property onConfigSelect - Optional callback when a configuration is selected or cleared.
+ */
 interface DeepSwePerformanceRankingProps {
-  /** Filtered DeepSWE configurations to display. */
   rows: readonly DeepSweLeaderboardRow[];
-  /** Called when the user selects or clears a configuration. */
   onConfigSelect?: (config: string | null) => void;
 }
 

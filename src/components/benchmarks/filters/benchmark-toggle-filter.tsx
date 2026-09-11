@@ -2,13 +2,25 @@ import type { ReactElement } from "react";
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-/** A labeled value for a benchmark toggle filter. */
+/**
+ * A labeled value for a benchmark toggle filter.
+ *
+ * @property label - Accessible and visible option label.
+ * @property value - Controlled value represented by the option.
+ */
 export interface BenchmarkToggleFilterOption<T extends string> {
   label: string;
   value: T;
 }
 
-/** Controlled selection, accessible group label, and available options; no implicit default. */
+/**
+ * Controlled selection, accessible group label, and available options; no implicit default.
+ *
+ * @property label - Accessible label for the toggle group.
+ * @property options - Available values in display order.
+ * @property value - Currently selected value.
+ * @property onChange - Called when the selected value changes; clearing is ignored.
+ */
 export interface BenchmarkToggleFilterProps<T extends string> {
   label: string;
   options: readonly BenchmarkToggleFilterOption<T>[];

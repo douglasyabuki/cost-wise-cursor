@@ -33,6 +33,12 @@ import {
 /**
  * DeepSWE data and controlled version selection; changelog and Cursor pricing are optional.
  * Configuration filters and the efficiency metric are managed locally.
+ *
+ * @property changelog - Optional benchmark changelog.
+ * @property cursorModelPrices - Optional Cursor model pricing records for availability matching.
+ * @property leaderboard - Parsed DeepSWE leaderboard data.
+ * @property version - Currently selected benchmark version.
+ * @property onVersionChange - Called when the selected version changes.
  */
 export interface DeepSweDashboardProps {
   changelog?: BenchmarkChangelogData;
@@ -42,11 +48,25 @@ export interface DeepSweDashboardProps {
   onVersionChange: (version: DeepSweVersion) => void;
 }
 
+/**
+ * Model configurations prepared for the shared configuration filter.
+ *
+ * @property model - Model identifier.
+ * @property rows - Model configurations in reasoning-effort order.
+ */
 interface ConfigModelGroup {
   model: string;
   rows: DeepSweLeaderboardRow[];
 }
 
+/**
+ * Cursor availability presets prepared for the configuration filter.
+ *
+ * @property cursorConfigs - Configurations for models without legacy Max Mode.
+ * @property cursorMatchedCount - Number of matched models without legacy Max Mode.
+ * @property cursorMaxIncludedConfigs - All matched configurations, including legacy Max Mode models.
+ * @property cursorMaxMatchedCount - Number of matched models requiring legacy Max Mode.
+ */
 interface CursorFilterConfigs {
   cursorConfigs: ReadonlySet<string>;
   cursorMatchedCount: number;

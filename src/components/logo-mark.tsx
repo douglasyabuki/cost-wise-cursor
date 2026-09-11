@@ -10,6 +10,13 @@ const logoMarks = {
   frontier: { src: Frontier, label: "Frontier" },
 } as const;
 
+/**
+ * Properties for a benchmark or product logo image.
+ *
+ * @property name - Registered logo to render.
+ * @property alt - Optional accessible text; defaults to the logo label.
+ * Standard image attributes are supported except `src` and `srcSet`.
+ */
 export type LogoMarkProps = Omit<
   ComponentPropsWithoutRef<"img">,
   "src" | "srcSet"
@@ -17,6 +24,12 @@ export type LogoMarkProps = Omit<
   name: keyof typeof logoMarks;
 };
 
+/**
+ * Renders a registered logo with a default accessible label.
+ *
+ * @param props - Logo name and standard image attributes.
+ * @returns The selected logo image.
+ */
 export const LogoMark = ({ name, alt, ...props }: LogoMarkProps) => {
   const { src, label } = logoMarks[name];
 

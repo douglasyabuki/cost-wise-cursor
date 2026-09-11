@@ -12,6 +12,9 @@ import { formatLongDate } from "@/utils/date";
 
 /**
  * A category of updates published for one benchmark date.
+ *
+ * @property category - Category heading shown for the updates.
+ * @property items - Update descriptions in source order.
  */
 export interface BenchmarkChangelogSection {
   category: string;
@@ -20,6 +23,9 @@ export interface BenchmarkChangelogSection {
 
 /**
  * All updates published for one benchmark date.
+ *
+ * @property date - Source date for the entry.
+ * @property sections - Categorized updates for the date.
  */
 export interface BenchmarkChangelogEntry {
   date: string;
@@ -33,9 +39,10 @@ export type BenchmarkChangelog = readonly BenchmarkChangelogEntry[];
 
 /**
  * Properties for the shared benchmark changelog metadata and Sheet.
+ *
+ * @property changelog - Optional newest-first changelog data; no metadata is rendered when absent.
  */
 export interface BenchmarkChangelogProps {
-  /** Complete changelog data returned by the benchmark service. */
   changelog?: BenchmarkChangelog;
 }
 
