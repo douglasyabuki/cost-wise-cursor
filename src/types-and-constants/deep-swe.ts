@@ -94,7 +94,7 @@ export interface DeepSweLeaderboardRow {
 export interface DeepSweLeaderboard {
   scope: string;
   unit: string;
-  generated_at: string;
+  generated_at?: string;
   n_tasks_in_set: number;
   latest_job: DeepSweLatestJob | null;
   rows: DeepSweLeaderboardRow[];

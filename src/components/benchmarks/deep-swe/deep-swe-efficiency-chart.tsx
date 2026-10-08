@@ -28,6 +28,7 @@ import { getModelColor } from "@/utils/model-colors";
  *
  * @property availableRows - All matched configurations available for the active benchmark version.
  * @property changelog - Optional complete benchmark changelog.
+ * @property updatedAt - Timestamp from the active leaderboard's generated_at metadata.
  * @property metric - Efficiency metric plotted on the horizontal axis.
  * @property onAddConfig - Adds one configuration to the selected set.
  * @property onAddModel - Adds every configuration for one model.
@@ -41,6 +42,7 @@ import { getModelColor } from "@/utils/model-colors";
 interface DeepSweEfficiencyChartProps {
   availableRows: readonly DeepSweLeaderboardRow[];
   changelog?: BenchmarkChangelogData;
+  updatedAt: string | null;
   metric: EfficiencyMetric;
   onAddConfig: (config: string) => void;
   onAddModel: (model: string) => void;
@@ -167,6 +169,7 @@ const getMetricAxis = (
 export const DeepSweEfficiencyChart = ({
   availableRows,
   changelog,
+  updatedAt,
   metric,
   onAddConfig,
   onAddModel,
@@ -202,6 +205,7 @@ export const DeepSweEfficiencyChart = ({
       key={`${version}-${metric}`}
       availableConfigs={availableConfigs}
       changelog={changelog}
+      updatedAt={updatedAt}
       chartAriaDescription="Higher scores and lower metric values indicate stronger efficiency."
       chartAriaLabel={`DeepSWE score by ${getMetricAxisLabel(metric)}`}
       emptyMessage="No data is available for the selected configurations and metric."

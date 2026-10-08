@@ -94,7 +94,6 @@ export const parseDeepSweLeaderboard = (value: unknown): DeepSweLeaderboard => {
     !isRecord(value) ||
     typeof value.scope !== "string" ||
     typeof value.unit !== "string" ||
-    typeof value.generated_at !== "string" ||
     typeof value.n_tasks_in_set !== "number" ||
     !Array.isArray(value.rows) ||
     !value.rows.every(isLeaderboardRow)
@@ -102,7 +101,11 @@ export const parseDeepSweLeaderboard = (value: unknown): DeepSweLeaderboard => {
     throw new Error("DeepSWE returned an invalid leaderboard response");
   }
 
-  return value as unknown as DeepSweLeaderboard;
+  return {
+    ...value,
+    generated_at:
+      typeof value.generated_at === "string" ? value.generated_at : undefined,
+  } as unknown as DeepSweLeaderboard;
 };
 
 /**

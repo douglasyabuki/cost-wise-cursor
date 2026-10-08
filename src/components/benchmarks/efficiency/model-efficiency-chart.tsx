@@ -55,6 +55,7 @@ export interface EfficiencyChartSeries {
  *
  * @property availableConfigs - All configurations that context actions may add.
  * @property changelog - Optional benchmark changelog shown beside the heading.
+ * @property updatedAt - Optional benchmark update timestamp override.
  * @property chartAriaDescription - Screen-reader description of the chart's meaning.
  * @property chartAriaLabel - Accessible name for the chart.
  * @property emptyMessage - Message shown when no series can be plotted.
@@ -82,6 +83,7 @@ interface ModelEfficiencyChartProps {
     model: string;
   }[];
   changelog?: BenchmarkChangelogData;
+  updatedAt?: string | null;
   chartAriaDescription: string;
   chartAriaLabel: string;
   emptyMessage: string;
@@ -135,6 +137,7 @@ const createScoreTicks = (maximum: number): number[] =>
 export const ModelEfficiencyChart = ({
   availableConfigs,
   changelog,
+  updatedAt,
   chartAriaDescription,
   chartAriaLabel,
   emptyMessage,
@@ -436,7 +439,7 @@ export const ModelEfficiencyChart = ({
             {metricDescription}
           </p>
         </div>
-        <BenchmarkChangelog changelog={changelog} />
+        <BenchmarkChangelog changelog={changelog} updatedAt={updatedAt} />
       </div>
 
       <div className="bg-card relative min-w-0 overflow-hidden rounded-md border">

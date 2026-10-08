@@ -445,6 +445,7 @@ export const DeepSweDashboard = ({
       <DeepSweEfficiencyChart
         availableRows={matchedRows}
         changelog={changelog}
+        updatedAt={leaderboard.generated_at ?? null}
         key={`${version}-${metric}-${hiddenConfigKey}`}
         metric={metric}
         onAddConfig={handleAddConfig}
