@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,less,css}\""
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,less,css}\"",
+    "fix": "npm run lint:fix && npm run format"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
